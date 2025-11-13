@@ -1,0 +1,90 @@
+{{!
+    This file is part of Moodle - https://moodle.org/
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+}}
+{{!
+    @template mod_harpiasurvey/question_bank_modal_body
+
+    Template for the question bank modal body.
+
+    Context variables required for this template:
+    * loading - Whether content is loading
+    * error - Error message if any
+    * questions - Array of available questions
+    * has_questions - Whether there are questions available
+}}
+{{#loading}}
+    <div class="text-center p-4">
+        <div class="spinner-border" role="status">
+            <span class="sr-only">{{#str}}loading{{/str}}</span>
+        </div>
+    </div>
+{{/loading}}
+{{^loading}}
+    {{#error}}
+        <div class="alert alert-danger">{{error}}</div>
+    {{/error}}
+    {{^error}}
+        {{#has_questions}}
+            <div class="table-responsive">
+                <table class="table table-hover table-bordered">
+                    <thead class="table-dark">
+                        <tr>
+                            <th scope="col">{{#str}}question, mod_harpiasurvey{{/str}}</th>
+                            <th scope="col">{{#str}}type, mod_harpiasurvey{{/str}}</th>
+                            <th scope="col">{{#str}}description, mod_harpiasurvey{{/str}}</th>
+                            {{#is_aichat_page}}
+                                <th scope="col">{{#str}}evaluatesconversation, mod_harpiasurvey{{/str}}</th>
+                            {{/is_aichat_page}}
+                            <th scope="col">{{#str}}actions, mod_harpiasurvey{{/str}}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#questions}}
+                            <tr>
+                                <td>{{name}}</td>
+                                <td>{{typedisplay}}</td>
+                                <td>{{description}}</td>
+                                {{#is_aichat_page}}
+                                    <td>
+                                        {{#is_conversation_question}}
+                                            <span class="text-muted">—</span>
+                                        {{/is_conversation_question}}
+                                        {{^is_conversation_question}}
+                                            <select class="form-select form-select-sm conversation-select" data-questionid="{{id}}">
+                                                <option value="0">{{#str}}none, mod_harpiasurvey{{/str}}</option>
+                                                {{#conversation_questions}}
+                                                    <option value="{{id}}">{{name}}</option>
+                                                {{/conversation_questions}}
+                                            </select>
+                                        {{/is_conversation_question}}
+                                    </td>
+                                {{/is_aichat_page}}
+                                <td>
+                                    <button class="btn btn-sm btn-primary" data-action="add-question" data-questionid="{{id}}">
+                                        {{#str}}add, mod_harpiasurvey{{/str}}
+                                    </button>
+                                </td>
+                            </tr>
+                        {{/questions}}
+                    </tbody>
+                </table>
+            </div>
+        {{/has_questions}}
+        {{^has_questions}}
+            <div class="alert alert-info">
+                {{#str}}noquestionsavailable, mod_harpiasurvey{{/str}}
+            </div>
+        {{/has_questions}}
+    {{/error}}
+{{/loading}}
+

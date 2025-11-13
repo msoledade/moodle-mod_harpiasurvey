@@ -1,0 +1,236 @@
+/* Harpia Survey Module Styles */
+
+/* Page view styles - using direct selectors that work regardless of container */
+.page-view {
+    padding: 1.5rem 0;
+}
+
+.page-view h3 {
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.page-content {
+    padding: 1.25rem;
+    background-color: #f8f9fa;
+    border-radius: 0.375rem;
+    margin-bottom: 2rem;
+}
+
+/* Questions section */
+.page-questions {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 2px solid #dee2e6;
+}
+
+.question-item {
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    background-color: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.question-item:not(:last-child) {
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.question-item h5 {
+    margin-bottom: 1rem;
+    color: #495057;
+    font-weight: 600;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.question-description {
+    margin-bottom: 1.25rem;
+    color: #6c757d;
+    line-height: 1.6;
+}
+
+.question-options {
+    margin-top: 1rem;
+    padding-left: 0.5rem;
+}
+
+.question-options .form-check {
+    padding: 0.75rem 0.5rem;
+    margin-bottom: 0.5rem;
+    border-radius: 0.25rem;
+    transition: background-color 0.2s ease;
+}
+
+.question-options .form-check:hover {
+    background-color: #f8f9fa;
+}
+
+.question-options .form-check-label {
+    margin-left: 0.5rem;
+    cursor: pointer;
+}
+
+/* Form controls for non-choice questions */
+.question-item .form-control {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid #ced4da;
+    border-radius: 0.375rem;
+}
+
+.question-item .form-control:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* Edit button spacing */
+.page-view>.mt-3 {
+    margin-top: 2rem !important;
+    padding-top: 1.5rem;
+    border-top: 1px solid #dee2e6;
+}
+
+/* Card body padding improvements for harpiasurvey pages */
+.path-mod-harpiasurvey .card-body {
+    padding: 1.5rem;
+}
+
+/* Pages menu improvements */
+.path-mod-harpiasurvey .list-group-item {
+    padding: 0.75rem 1rem;
+    border-left: 3px solid #e9ecef;
+    transition: all 0.2s ease;
+    overflow: visible;
+}
+
+.path-mod-harpiasurvey .list-group-item:hover {
+    background-color: #f8f9fa;
+    border-left-color: #007bff;
+    padding-left: 1.25rem;
+}
+
+.path-mod-harpiasurvey .list-group-item-action {
+    text-decoration: none;
+}
+
+/* Pages menu list items - single box with divisions */
+.path-mod-harpiasurvey .pages-menu-sticky .list-group-item {
+    border-left: 3px solid #e9ecef;
+    border-top: 1px solid #dee2e6;
+    border-right: 1px solid #dee2e6;
+    border-bottom: 1px solid #dee2e6;
+    margin-bottom: 0;
+}
+
+.path-mod-harpiasurvey .pages-menu-sticky .list-group-item:first-child {
+    border-top-left-radius: 0.375rem;
+    border-top-right-radius: 0.375rem;
+}
+
+.path-mod-harpiasurvey .pages-menu-sticky .list-group-item:last-child {
+    border-bottom-left-radius: 0.375rem;
+    border-bottom-right-radius: 0.375rem;
+    margin-bottom: 0;
+}
+
+.path-mod-harpiasurvey .pages-menu-sticky .list-group-item:hover {
+    border-left-color: #007bff;
+    background-color: #f8f9fa;
+}
+
+/* Active page highlight */
+.path-mod-harpiasurvey .pages-menu-sticky .list-group-item.active {
+    background-color: #e7f3ff;
+    border-left-color: #007bff;
+    border-left-width: 4px;
+    font-weight: 500;
+    color: #0056b3;
+}
+
+.path-mod-harpiasurvey .pages-menu-sticky .list-group-item.active:hover {
+    background-color: #d0e7ff;
+    border-left-color: #0056b3;
+}
+
+/* Likert scale horizontal layout */
+.path-mod-harpiasurvey .likert-scale {
+    padding: 1rem 0;
+    margin: 1rem 0;
+}
+
+.path-mod-harpiasurvey .likert-option {
+    flex: 1;
+    padding: 0.5rem;
+}
+
+.path-mod-harpiasurvey .likert-option input[type="radio"] {
+    margin: 0 auto;
+    display: block;
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+.path-mod-harpiasurvey .likert-option label {
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+    cursor: pointer;
+}
+
+/* Sticky pages menu - account for secondary navigation */
+.path-mod-harpiasurvey .pages-menu-sticky {
+    position: sticky;
+    top: 100px;
+    /* Account for primary nav + secondary nav + some padding */
+    max-height: calc(100vh - 120px);
+    /* Prevent overflow */
+    overflow-y: auto;
+}
+
+/* AI Conversation chat interface */
+.path-mod-harpiasurvey .ai-conversation-container .input-group {
+    display: flex;
+    align-items: stretch;
+}
+
+.path-mod-harpiasurvey .ai-conversation-container .chat-input {
+    resize: vertical;
+    flex: 1;
+    margin-top: 0;
+    /* Override Moodle's default form element margin */
+}
+
+.path-mod-harpiasurvey .ai-conversation-container .chat-send-btn {
+    margin-left: 0.5rem;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
+/* Stats table styles */
+.harpiasurvey-stats-table .answer-tag {
+    font-size: 0.875rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.25rem;
+    display: inline-flex;
+    align-items: center;
+}
+
+.harpiasurvey-stats-table .answer-text-plain {
+    display: inline-block;
+    margin-right: 0.5rem;
+}
+
+.harpiasurvey-stats-table .answer-items {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+}

@@ -1,0 +1,134 @@
+{{!
+    This file is part of Moodle - https://moodle.org/
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+}}
+{{!
+    @template mod_harpiasurvey/stats_table
+
+    Template for displaying stats/responses table.
+
+    Context variables required for this template:
+    * responses - Array of responses (includes both regular responses and conversations)
+    * has_responses - Whether there are responses
+    * noresponses - No responses message
+    * userlabel - Label for user column
+    * questionlabel - Label for question column
+    * answerlabel - Label for answer column
+    * timelabel - Label for time column
+}}
+<div class="harpiasurvey-stats-table">
+    <div class="mb-3 text-right">
+        <a href="{{downloadurl}}" class="btn btn-primary">
+            <i class="fa fa-download"></i> {{#str}}downloadcsv, mod_harpiasurvey{{/str}}
+        </a>
+    </div>
+    <table class="table table-hover table-bordered" style="width: 100%;">
+        <thead class="table-dark">
+            <tr>
+                <th scope="col">{{userlabel}}</th>
+                <th scope="col">{{questionlabel}}</th>
+                <th scope="col">{{questiontypelabel}}</th>
+                <th scope="col">{{evaluatesconversationlabel}}</th>
+                <th scope="col">{{answerlabel}}</th>
+                <th scope="col">{{timelabel}}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{#has_responses}}
+                {{#responses}}
+                    <tr>
+                        <td>{{user}}</td>
+                        <td>{{question}}</td>
+                        <td>{{questiontype}}</td>
+                        <td>
+                            {{#evaluatesconversation}}
+                                <span class="badge badge-info">{{evaluatesconversation}}</span>
+                            {{/evaluatesconversation}}
+                            {{^evaluatesconversation}}
+                                {{^isconversation}}
+                                    <span class="text-muted">—</span>
+                                {{/isconversation}}
+                            {{/evaluatesconversation}}
+                        </td>
+                        <td>
+                            {{#isconversation}}
+                            {{! Conversation display }}
+                            <div class="conversation-container" data-messages="{{messagesjson}}" data-conversation-id="{{id}}">
+                                <div class="conversation-preview">
+                                    <span class="badge badge-info mr-2">{{messagecount}} {{#str}}messages, mod_harpiasurvey{{/str}}</span>
+                                    <span class="text-muted">{{preview}}</span>
+                                </div>
+                                <button class="btn btn-sm btn-link expand-conversation-btn p-0 ml-1 mt-1" type="button" data-conversation-id="{{id}}">
+                                    <span class="expand-text">{{#str}}viewconversation, mod_harpiasurvey{{/str}}</span>
+                                    <span class="collapse-text" style="display: none;">{{#str}}hideconversation, mod_harpiasurvey{{/str}}</span>
+                                </button>
+                                <div class="conversation-messages mt-2" style="display: none;" data-conversation-id="{{id}}">
+                                    <div class="border rounded p-3" style="background-color: #f8f9fa; max-height: 400px; overflow-y: auto;">
+                                        {{#messages}}
+                                            {{#role.user}}
+                                            <div class="message mb-3 text-right">
+                                                <div class="d-inline-block p-2 rounded bg-primary text-white" style="max-width: 80%;">
+                                                    <div class="message-content">{{{content}}}</div>
+                                                    <small class="text-white-50 d-block mt-1">{{timecreated}}</small>
+                                                </div>
+                                            </div>
+                                            {{/role.user}}
+                                            {{#role.assistant}}
+                                            <div class="message mb-3 text-left">
+                                                <div class="d-inline-block p-2 rounded bg-light border" style="max-width: 80%;">
+                                                    <div class="message-content">{{{content}}}</div>
+                                                    <small class="text-muted d-block mt-1">{{timecreated}}</small>
+                                                </div>
+                                            </div>
+                                            {{/role.assistant}}
+                                        {{/messages}}
+                                    </div>
+                                </div>
+                            </div>
+                            {{/isconversation}}
+                            {{^isconversation}}
+                            {{! Regular response display }}
+                            <div class="answer-container" data-answer-items="{{answeritemsjson}}" data-response-id="{{id}}">
+                                <div class="answer-items">
+                                    {{#answeritems}}
+                                        {{#isoption}}
+                                            <span class="badge badge-secondary answer-tag mr-1 mb-1">
+                                                <span class="answer-text">{{text}}</span>
+                                            </span>
+                                        {{/isoption}}
+                                        {{^isoption}}
+                                            <span class="answer-text-plain">{{text}}</span>
+                                        {{/isoption}}
+                                    {{/answeritems}}
+                                </div>
+                                {{#islong}}
+                                    <button class="btn btn-sm btn-link expand-answer-btn p-0 ml-1 mt-1" type="button" data-response-id="{{id}}">
+                                        <span class="expand-text">{{#str}}expand, moodle{{/str}}</span>
+                                        <span class="collapse-text" style="display: none;">{{#str}}collapse, moodle{{/str}}</span>
+                                    </button>
+                                {{/islong}}
+                            </div>
+                            {{/isconversation}}
+                        </td>
+                        <td>{{timecreated}}</td>
+                    </tr>
+                {{/responses}}
+            {{/has_responses}}
+            {{^has_responses}}
+                <tr>
+                    <td colspan="6" class="text-center">{{noresponses}}</td>
+                </tr>
+            {{/has_responses}}
+        </tbody>
+    </table>
+</div>
+
