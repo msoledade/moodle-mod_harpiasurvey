@@ -114,13 +114,6 @@ if ($questionid) {
                 $formdata->numberallownegatives = $settings['allownegatives'] ?? 0;
             }
             
-            // AI Conversation settings.
-            if ($question->type === 'aiconversation') {
-                $formdata->aimodels = $settings['models'] ?? [];
-                $formdata->aibehavior = $settings['behavior'] ?? 'chat';
-                $formdata->aitemplate = $settings['template'] ?? '';
-                $formdata->aitemplateformat = $settings['templateformat'] ?? FORMAT_HTML;
-            }
         }
     }
 } else {
@@ -200,24 +193,6 @@ if ($form->is_cancelled()) {
         $settings['allownegatives'] = !empty($data->numberallownegatives) ? 1 : 0;
     }
     
-    // AI Conversation settings.
-    if ($data->type === 'aiconversation') {
-        $settings['models'] = !empty($data->aimodels) ? $data->aimodels : [];
-        $settings['behavior'] = $data->aibehavior ?? 'chat';
-        
-        // Handle AI template editor - need to do this before saving question.
-        $templatedata = file_postupdate_standard_editor(
-            $data,
-            'aitemplate',
-            $form->get_editor_options(),
-            $context,
-            'mod_harpiasurvey',
-            'question_ai_template',
-            $data->id ?? null
-        );
-        $settings['template'] = $templatedata->aitemplate ?? '';
-        $settings['templateformat'] = $templatedata->aitemplateformat ?? FORMAT_HTML;
-    }
     
     // Store settings as JSON.
     $questiondata->settings = !empty($settings) ? json_encode($settings) : null;

@@ -100,7 +100,6 @@ class question extends \moodleform {
             'number' => get_string('typenumber', 'mod_harpiasurvey'),
             'shorttext' => get_string('typeshorttext', 'mod_harpiasurvey'),
             'longtext' => get_string('typelongtext', 'mod_harpiasurvey'),
-            'aiconversation' => get_string('typeaiconversation', 'mod_harpiasurvey'),
         ];
         $mform->addElement('select', 'type', get_string('type', 'mod_harpiasurvey'), $typeoptions);
         $mform->setType('type', PARAM_ALPHANUMEXT);
@@ -166,7 +165,6 @@ class question extends \moodleform {
         $mform->hideIf('selection_settings', 'type', 'eq', 'likert');
         $mform->hideIf('selection_settings', 'type', 'eq', 'shorttext');
         $mform->hideIf('selection_settings', 'type', 'eq', 'longtext');
-        $mform->hideIf('selection_settings', 'type', 'eq', 'aiconversation');
         
         // Options field (one per line) - for singlechoice, multiplechoice, select.
         $mform->addElement('textarea', 'options', get_string('optionsoneline', 'mod_harpiasurvey'), [
@@ -240,62 +238,6 @@ class question extends \moodleform {
         $mform->setType('numberallownegatives', PARAM_BOOL);
         $mform->setDefault('numberallownegatives', isset($this->_customdata->numberallownegatives) ? $this->_customdata->numberallownegatives : 0);
 
-        // AI Conversation settings.
-        $mform->addElement('header', 'ai_settings', get_string('aiconversationsettings', 'mod_harpiasurvey'));
-        $mform->setExpanded('ai_settings', false);
-        // Hide AI settings for all types except aiconversation.
-        $mform->hideIf('ai_settings', 'type', 'neq', 'aiconversation');
-        
-        // Load available models.
-        $models = $DB->get_records('harpiasurvey_models', ['harpiasurveyid' => $this->_customdata->harpiasurveyid, 'enabled' => 1], 'name ASC');
-        $modeloptions = [];
-        foreach ($models as $model) {
-            $modeloptions[$model->id] = $model->name . ' (' . $model->model . ')';
-        }
-        
-        // Model selection (multi-select).
-        $mform->addElement('autocomplete', 'aimodels', get_string('aimodels', 'mod_harpiasurvey'), $modeloptions, [
-            'multiple' => true,
-            'noselectionstring' => get_string('noselection', 'mod_harpiasurvey'),
-        ]);
-        $mform->setType('aimodels', PARAM_INT);
-        $mform->addHelpButton('aimodels', 'aimodels', 'mod_harpiasurvey');
-        if (isset($this->_customdata->aimodels) && is_array($this->_customdata->aimodels)) {
-            $mform->getElement('aimodels')->setSelected($this->_customdata->aimodels);
-        }
-        
-        // Behavior (Q&A or Chat).
-        $behavioroptions = [
-            'qa' => get_string('aibehaviorqa', 'mod_harpiasurvey'),
-            'chat' => get_string('aibehaviorchat', 'mod_harpiasurvey'),
-        ];
-        $mform->addElement('select', 'aibehavior', get_string('aibehavior', 'mod_harpiasurvey'), $behavioroptions);
-        $mform->setType('aibehavior', PARAM_ALPHANUMEXT);
-        $mform->setDefault('aibehavior', isset($this->_customdata->aibehavior) ? $this->_customdata->aibehavior : 'chat');
-        $mform->addHelpButton('aibehavior', 'aibehavior', 'mod_harpiasurvey');
-        
-        // Template (rich text editor).
-        $aitemplatedata = new \stdClass();
-        $aitemplatedata->aitemplate = isset($this->_customdata->aitemplate) ? $this->_customdata->aitemplate : '';
-        $aitemplatedata->aitemplateformat = isset($this->_customdata->aitemplateformat) ? $this->_customdata->aitemplateformat : FORMAT_HTML;
-        $aitemplatedata->id = isset($this->_customdata->id) ? $this->_customdata->id : null;
-        
-        $templatedata = file_prepare_standard_editor(
-            $aitemplatedata,
-            'aitemplate',
-            $this->get_editor_options(),
-            $this->context,
-            'mod_harpiasurvey',
-            'question_ai_template',
-            $aitemplatedata->id
-        );
-        
-        $mform->addElement('editor', 'aitemplate_editor', get_string('aitemplate', 'mod_harpiasurvey'), null, $this->get_editor_options());
-        $mform->setType('aitemplate_editor', PARAM_CLEANHTML);
-        if (isset($templatedata->aitemplate_editor)) {
-            $mform->setDefault('aitemplate_editor', $templatedata->aitemplate_editor);
-        }
-        $mform->addHelpButton('aitemplate_editor', 'aitemplate', 'mod_harpiasurvey');
 
         // Enabled field (checkbox/toggle).
         $mform->addElement('advcheckbox', 'enabled', get_string('enabled', 'mod_harpiasurvey'));

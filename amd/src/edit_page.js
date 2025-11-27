@@ -29,56 +29,7 @@ import $ from 'jquery';
  * Initialize the edit page functionality.
  */
 export const init = () => {
-    // Handle evaluates conversation dropdown changes.
-    $("body").on("change", ".evaluates-conversation-select", function() {
-        const select = $(this);
-        const pagequestionid = select.data('pagequestionid');
-        const cmid = select.data('cmid');
-        const evaluatesConversationId = parseInt(select.val(), 10) || 0;
-
-        // Disable the select while updating.
-        select.prop('disabled', true);
-
-        const wwwroot = Config.wwwroot;
-        const sesskey = Config.sesskey || M.cfg.sesskey;
-        const ajaxUrl = wwwroot + '/mod/harpiasurvey/ajax.php';
-        const params = new URLSearchParams({
-            action: 'update_evaluates_conversation',
-            cmid: cmid,
-            pagequestionid: pagequestionid,
-            evaluates_conversation_id: evaluatesConversationId,
-            sesskey: sesskey
-        });
-
-        fetch(ajaxUrl + '?' + params.toString())
-            .then((response) => response.json())
-            .then((response) => {
-                select.prop('disabled', false);
-                if (response.success) {
-                    Notification.addNotification({
-                        message: response.message || 'Conversation relationship updated',
-                        type: 'success'
-                    });
-                } else {
-                    // Revert the selection on error.
-                    select.val(select.data('previous-value') || 0);
-                    Notification.addNotification({
-                        message: response.message || 'Error updating conversation relationship',
-                        type: 'error'
-                    });
-                }
-            })
-            .catch((error) => {
-                select.prop('disabled', false);
-                // Revert the selection on error.
-                select.val(select.data('previous-value') || 0);
-                Notification.exception(error);
-            });
-    });
-
-    // Store previous value on focus for potential revert.
-    $("body").on("focus", ".evaluates-conversation-select", function() {
-        $(this).data('previous-value', $(this).val());
-    });
+    // Note: evaluates_conversation_id functionality has been removed.
+    // All questions on aichat pages automatically evaluate the page's chat conversation.
 };
 

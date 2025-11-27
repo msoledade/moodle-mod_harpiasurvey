@@ -139,6 +139,12 @@ mod/harpiasurvey/
 
 Para questões, bugs ou sugestões, consulte a documentação do Moodle ou entre em contato com a equipe de desenvolvimento.
 
+## Créditos
+
+Este módulo foi desenvolvido pelo grupo de pesquisa **KEML - Knowledge Enhanced Machine Learning** do Centro de Inteligência Artificial (C4AI) da Universidade de São Paulo.
+
+Para mais informações sobre o KEML, visite: [https://sites.usp.br/keml/](https://sites.usp.br/keml/)
+
 ## Licença
 
 Este módulo é licenciado sob a GNU GPL v3 ou posterior. Veja o arquivo LICENSE para mais detalhes.

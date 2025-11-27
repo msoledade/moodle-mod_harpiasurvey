@@ -33,6 +33,12 @@ defined('MOODLE_INTERNAL') || die();
 function xmldb_harpiasurvey_upgrade($oldversion) {
     global $DB, $CFG;
 
+    // If this is a fresh install (oldversion is 0), install.xml handles everything.
+    // No need to run upgrades.
+    if ($oldversion == 0) {
+        return true;
+    }
+
     $dbman = $DB->get_manager();
 
     // Automatically generated Moodle v5.1.0 release upgrade line. Do not remove.
@@ -193,6 +199,155 @@ function xmldb_harpiasurvey_upgrade($oldversion) {
         $dbman->add_key($table, $key);
         
         upgrade_mod_savepoint(true, 202501280012, 'harpiasurvey');
+    }
+
+    if ($oldversion < 202501280013) {
+        // Add behavior field to harpiasurvey_pages table for turn-based navigation.
+        $table = new xmldb_table('harpiasurvey_pages');
+        
+        // Add 'behavior' field (continuous, turns, multi_model).
+        $field = new xmldb_field('behavior', XMLDB_TYPE_CHAR, '50', null, null, null, 'continuous', 'type');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        
+        // Add turn_id field to harpiasurvey_conversations table for grouping messages into turns.
+        $table = new xmldb_table('harpiasurvey_conversations');
+        
+        // Add 'turn_id' field (NULL for continuous mode, set for turns mode).
+        $field = new xmldb_field('turn_id', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'parentid');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        
+        upgrade_mod_savepoint(true, 202501280013, 'harpiasurvey');
+    }
+
+    if ($oldversion < 202501280014) {
+        // Create harpiasurvey_page_models table for page-model associations.
+        $installfile = $CFG->dirroot . '/mod/harpiasurvey/db/install.xml';
+        if (!$dbman->table_exists('harpiasurvey_page_models')) {
+            $dbman->install_one_table_from_xmldb_file($installfile, 'harpiasurvey_page_models');
+        }
+        
+        // Update harpiasurvey_conversations table to allow NULL questionid.
+        $table = new xmldb_table('harpiasurvey_conversations');
+        $field = new xmldb_field('questionid');
+        if ($dbman->field_exists($table, $field)) {
+            // Change field to allow NULL by setting NOTNULL to null (false).
+            // We need to define the field with all its attributes, but with NOTNULL = null.
+            $field->set_attributes(XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'pageid');
+            $dbman->change_field_notnull($table, $field);
+        }
+        
+        // Drop foreign key for questionid if it exists (since it can now be NULL).
+        // Use find_key_name() to check if the key exists before dropping it.
+        $key = new xmldb_key('fk_question', XMLDB_KEY_FOREIGN, ['questionid'], 'harpiasurvey_questions', ['id']);
+        if ($dbman->find_key_name($table, $key)) {
+            $dbman->drop_key($table, $key);
+        }
+        
+        // Drop old index and create new one.
+        $index = new xmldb_index('idx_user_question', XMLDB_INDEX_NOTUNIQUE, ['userid', 'questionid']);
+        if ($dbman->index_exists($table, $index)) {
+            $dbman->drop_index($table, $index);
+        }
+        
+        $index = new xmldb_index('idx_user_page', XMLDB_INDEX_NOTUNIQUE, ['userid', 'pageid']);
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+        
+        upgrade_mod_savepoint(true, 202501280014, 'harpiasurvey');
+    }
+
+    if ($oldversion < 202501280015) {
+        // Fix: Update harpiasurvey_conversations table to allow NULL questionid (retry if previous upgrade failed).
+        $table = new xmldb_table('harpiasurvey_conversations');
+        
+        // First, drop the old index that depends on questionid (if it exists).
+        $oldindex = new xmldb_index('idx_user_question', XMLDB_INDEX_NOTUNIQUE, ['userid', 'questionid']);
+        if ($dbman->index_exists($table, $oldindex)) {
+            $dbman->drop_index($table, $oldindex);
+        }
+        
+        // Also check for the unique index that might use questionid.
+        $uniqueindex = new xmldb_index('unique_user_page_question', XMLDB_INDEX_UNIQUE, ['userid', 'pageid', 'questionid']);
+        if ($dbman->index_exists($table, $uniqueindex)) {
+            $dbman->drop_index($table, $uniqueindex);
+        }
+        
+        // Now we can change the field to allow NULL.
+        $field = new xmldb_field('questionid');
+        if ($dbman->field_exists($table, $field)) {
+            // Change field to allow NULL by setting NOTNULL to null (false).
+            // We need to define the field with all its attributes, but with NOTNULL = null.
+            $field->set_attributes(XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'pageid');
+            $dbman->change_field_notnull($table, $field);
+        }
+        
+        upgrade_mod_savepoint(true, 202501280015, 'harpiasurvey');
+    }
+
+    if ($oldversion < 202501280016) {
+        // Create harpiasurvey_turn_evaluations table for turn-based evaluations.
+        $installfile = $CFG->dirroot . '/mod/harpiasurvey/db/install.xml';
+        if (!$dbman->table_exists('harpiasurvey_turn_evaluations')) {
+            $dbman->install_one_table_from_xmldb_file($installfile, 'harpiasurvey_turn_evaluations');
+        }
+        
+        upgrade_mod_savepoint(true, 202501280016, 'harpiasurvey');
+    }
+
+    if ($oldversion < 202501280017) {
+        // Add min_turn field to harpiasurvey_page_questions for turn-based question display.
+        $table = new xmldb_table('harpiasurvey_page_questions');
+        $field = new xmldb_field('min_turn', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'evaluates_conversation_id');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Add turn_id field to harpiasurvey_responses for turn-based responses.
+        $table = new xmldb_table('harpiasurvey_responses');
+        $field = new xmldb_field('turn_id', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'response');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Drop old unique index and create new one with turn_id.
+        $table = new xmldb_table('harpiasurvey_responses');
+        $oldindex = new xmldb_index('unique_user_page_question', XMLDB_INDEX_UNIQUE, ['userid', 'pageid', 'questionid']);
+        if ($dbman->index_exists($table, $oldindex)) {
+            $dbman->drop_index($table, $oldindex);
+        }
+        $newindex = new xmldb_index('unique_user_page_question_turn', XMLDB_INDEX_UNIQUE, ['userid', 'pageid', 'questionid', 'turn_id']);
+        if (!$dbman->index_exists($table, $newindex)) {
+            $dbman->add_index($table, $newindex);
+        }
+
+        upgrade_mod_savepoint(true, 202501280017, 'harpiasurvey');
+    }
+
+    if ($oldversion < 202501280018) {
+        // Remove evaluates_conversation_id field and foreign key.
+        // This field is no longer needed since each aichat page has only one chat,
+        // and all questions on that page evaluate that chat.
+        $table = new xmldb_table('harpiasurvey_page_questions');
+
+        // Drop foreign key first (if it exists).
+        // Use find_key_name() to check if the key exists before dropping it.
+        $key = new xmldb_key('fk_evaluates_conversation', XMLDB_KEY_FOREIGN, ['evaluates_conversation_id'], 'harpiasurvey_questions', ['id']);
+        if ($dbman->find_key_name($table, $key)) {
+            $dbman->drop_key($table, $key);
+        }
+
+        // Drop the field.
+        $field = new xmldb_field('evaluates_conversation_id');
+        if ($dbman->field_exists($table, $field)) {
+            $dbman->drop_field($table, $field);
+        }
+
+        upgrade_mod_savepoint(true, 202501280018, 'harpiasurvey');
     }
 
     return true;

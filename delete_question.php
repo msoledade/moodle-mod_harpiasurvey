@@ -46,8 +46,8 @@ if ($confirm && confirm_sesskey()) {
     // Delete all conversations for this question.
     $DB->delete_records('harpiasurvey_conversations', ['questionid' => $questionid]);
     
-    // Delete page-question associations where this question is referenced as evaluates_conversation_id.
-    $DB->set_field('harpiasurvey_page_questions', 'evaluates_conversation_id', null, ['evaluates_conversation_id' => $questionid]);
+    // Note: evaluates_conversation_id field has been removed.
+    // No need to clean up references anymore.
     
     // Delete the question.
     $DB->delete_records('harpiasurvey_questions', ['id' => $questionid]);
@@ -84,7 +84,8 @@ $pagequestioncount = $DB->count_records('harpiasurvey_page_questions', ['questio
 $optioncount = $DB->count_records('harpiasurvey_question_options', ['questionid' => $questionid]);
 $responsecount = $DB->count_records('harpiasurvey_responses', ['questionid' => $questionid]);
 $conversationcount = $DB->count_records('harpiasurvey_conversations', ['questionid' => $questionid]);
-$evaluatescount = $DB->count_records('harpiasurvey_page_questions', ['evaluates_conversation_id' => $questionid]);
+// Note: evaluates_conversation_id field has been removed.
+$evaluatescount = 0;
 
 echo $OUTPUT->confirm(
     get_string('deletequestionconfirm', 'mod_harpiasurvey', [

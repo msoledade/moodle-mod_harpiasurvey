@@ -29,7 +29,7 @@ require_login($course, true, $cm);
 // Different capabilities for different actions.
 if (in_array($action, ['add_question_to_page', 'get_available_questions'])) {
     require_capability('mod/harpiasurvey:manageexperiments', $cm->context);
-} else if (in_array($action, ['save_response', 'send_ai_message', 'get_conversation_history'])) {
+} else if (in_array($action, ['save_response', 'send_ai_message', 'get_conversation_history', 'get_turn_responses'])) {
     // Students can save their own responses and interact with AI.
     require_capability('mod/harpiasurvey:view', $cm->context);
 }
@@ -56,32 +56,10 @@ switch ($action) {
         $pagequestionids = $DB->get_records('harpiasurvey_page_questions', ['pageid' => $pageid], '', 'questionid');
         $pagequestionids = array_keys($pagequestionids);
         
-        // Get conversation questions on this page (for aichat pages, to show in dropdown).
-        $conversationquestions = [];
-        if ($page_type === 'aichat') {
-            $conversationquestions_sql = "SELECT pq.questionid, q.name
-                                            FROM {harpiasurvey_page_questions} pq
-                                            JOIN {harpiasurvey_questions} q ON q.id = pq.questionid
-                                           WHERE pq.pageid = :pageid AND q.type = 'aiconversation' AND pq.enabled = 1
-                                        ORDER BY pq.sortorder ASC";
-            $conversationrecords = $DB->get_records_sql($conversationquestions_sql, ['pageid' => $pageid]);
-            foreach ($conversationrecords as $conv) {
-                $conversationquestions[] = [
-                    'id' => $conv->questionid,
-                    'name' => format_string($conv->name)
-                ];
-            }
-        }
-        
-        // Filter out questions already on the page and filter by page type.
+        // Filter out questions already on the page.
         $availablequestions = [];
         foreach ($questions as $question) {
             if (!in_array($question->id, $pagequestionids)) {
-                // Filter: aiconversation questions only allowed on aichat pages
-                // Non-aiconversation questions are allowed on all pages
-                if ($question->type === 'aiconversation' && $page_type !== 'aichat') {
-                    continue; // Skip aiconversation questions on non-aichat pages
-                }
                 
                 $description = format_text($question->description, $question->descriptionformat, [
                     'context' => $cm->context,
@@ -105,8 +83,7 @@ switch ($action) {
         echo json_encode([
             'success' => true,
             'questions' => $availablequestions,
-            'is_aichat_page' => ($page_type === 'aichat'),
-            'conversation_questions' => $conversationquestions
+            'is_aichat_page' => ($page_type === 'aichat')
         ]);
         break;
         
@@ -114,40 +91,12 @@ switch ($action) {
         require_sesskey();
         
         $questionid = required_param('questionid', PARAM_INT);
-        $evaluates_conversation_id = optional_param('evaluates_conversation_id', 0, PARAM_INT);
         
         // Check if question belongs to this harpiasurvey instance.
         $question = $DB->get_record('harpiasurvey_questions', [
             'id' => $questionid,
             'harpiasurveyid' => $harpiasurvey->id
         ], '*', MUST_EXIST);
-        
-        // Validate: aiconversation questions can only be added to aichat pages
-        if ($question->type === 'aiconversation' && $page->type !== 'aichat') {
-            echo json_encode([
-                'success' => false,
-                'message' => 'AI conversation questions can only be added to AI Chat pages.'
-            ]);
-            break;
-        }
-        
-        // Validate: if evaluates_conversation_id is provided, it must be a valid conversation question on this page
-        if ($evaluates_conversation_id > 0) {
-            $conversationquestion = $DB->get_record_sql(
-                "SELECT pq.questionid, q.type
-                   FROM {harpiasurvey_page_questions} pq
-                   JOIN {harpiasurvey_questions} q ON q.id = pq.questionid
-                  WHERE pq.pageid = :pageid AND pq.questionid = :convquestionid AND q.type = 'aiconversation'",
-                ['pageid' => $pageid, 'convquestionid' => $evaluates_conversation_id]
-            );
-            if (!$conversationquestion) {
-                echo json_encode([
-                    'success' => false,
-                    'message' => 'Invalid conversation question selected.'
-                ]);
-                break;
-            }
-        }
         
         // Check if question is already on this page.
         $existing = $DB->get_record('harpiasurvey_page_questions', [
@@ -169,6 +118,11 @@ switch ($action) {
             [$pageid]
         );
         
+        // Get page to check if it's a turns mode page.
+        if (!$page || $page->id != $pageid) {
+            $page = $DB->get_record('harpiasurvey_pages', ['id' => $pageid], '*', MUST_EXIST);
+        }
+        
         // Add question to page.
         $pagequestion = new stdClass();
         $pagequestion->pageid = $pageid;
@@ -176,9 +130,13 @@ switch ($action) {
         $pagequestion->sortorder = ($maxsort !== false) ? $maxsort + 1 : 0;
         $pagequestion->timecreated = time();
         $pagequestion->enabled = 1;
-        if ($evaluates_conversation_id > 0) {
-            $pagequestion->evaluates_conversation_id = $evaluates_conversation_id;
+        
+        // For aichat pages with turns mode, set min_turn = 1 by default.
+        // All questions on aichat pages evaluate the page's chat conversation.
+        if ($page->type === 'aichat' && ($page->behavior ?? 'continuous') === 'turns') {
+            $pagequestion->min_turn = 1; // Default to appearing from turn 1.
         }
+        
         $DB->insert_record('harpiasurvey_page_questions', $pagequestion);
         
         echo json_encode([
@@ -187,62 +145,29 @@ switch ($action) {
         ]);
         break;
         
-    case 'update_evaluates_conversation':
-        require_sesskey();
-        
-        $pagequestionid = required_param('pagequestionid', PARAM_INT);
-        $evaluates_conversation_id = optional_param('evaluates_conversation_id', 0, PARAM_INT);
-        
-        // Get the page question record.
-        $pagequestion = $DB->get_record('harpiasurvey_page_questions', ['id' => $pagequestionid], '*', MUST_EXIST);
-        
-        // Verify the page belongs to this harpiasurvey instance.
-        $page = $DB->get_record('harpiasurvey_pages', ['id' => $pagequestion->pageid], '*', MUST_EXIST);
-        $experiment = $DB->get_record('harpiasurvey_experiments', ['id' => $page->experimentid], '*', MUST_EXIST);
-        if ($experiment->harpiasurveyid != $harpiasurvey->id) {
-            echo json_encode([
-                'success' => false,
-                'message' => 'Invalid page question'
-            ]);
-            break;
-        }
-        
-        // Validate: if evaluates_conversation_id is provided, it must be a valid conversation question on this page
-        if ($evaluates_conversation_id > 0) {
-            $conversationquestion = $DB->get_record_sql(
-                "SELECT pq.questionid, q.type
-                   FROM {harpiasurvey_page_questions} pq
-                   JOIN {harpiasurvey_questions} q ON q.id = pq.questionid
-                  WHERE pq.pageid = :pageid AND pq.questionid = :convquestionid AND q.type = 'aiconversation'",
-                ['pageid' => $page->id, 'convquestionid' => $evaluates_conversation_id]
-            );
-            if (!$conversationquestion) {
-                echo json_encode([
-                    'success' => false,
-                    'message' => 'Invalid conversation question selected.'
-                ]);
-                break;
-            }
-        }
-        
-        // Update the evaluates_conversation_id.
-        $pagequestion->evaluates_conversation_id = ($evaluates_conversation_id > 0) ? $evaluates_conversation_id : null;
-        $DB->update_record('harpiasurvey_page_questions', $pagequestion);
-        
-        echo json_encode([
-            'success' => true,
-            'message' => 'Conversation relationship updated'
-        ]);
-        break;
-        
     case 'save_response':
         require_sesskey();
         
         $questionid = required_param('questionid', PARAM_INT);
         $response = optional_param('response', '', PARAM_RAW);
+        // Get turn_id - can be 0 or positive integer, or null for regular questions.
+        $turn_id_param = optional_param('turn_id', null, PARAM_RAW);
+        $turn_id = null;
+        if ($turn_id_param !== null && $turn_id_param !== '' && $turn_id_param !== 'null') {
+            $turn_id = (int)$turn_id_param;
+            // Only accept positive integers (turn IDs start at 1).
+            if ($turn_id <= 0) {
+                $turn_id = null;
+            }
+        }
+        
+        // Debug: Log turn_id for troubleshooting.
+        debugging("save_response: turn_id_param = " . var_export($turn_id_param, true) . ", turn_id = " . var_export($turn_id, true) . " for questionid = {$questionid}, pageid = {$pageid}", DEBUG_NORMAL);
         
         // Verify page belongs to this harpiasurvey instance.
-        $page = $DB->get_record('harpiasurvey_pages', ['id' => $pageid], '*', MUST_EXIST);
+        if (!$page || $page->id != $pageid) {
+            $page = $DB->get_record('harpiasurvey_pages', ['id' => $pageid], '*', MUST_EXIST);
+        }
         $experiment = $DB->get_record('harpiasurvey_experiments', ['id' => $page->experimentid], '*', MUST_EXIST);
         if ($experiment->harpiasurveyid != $harpiasurvey->id) {
             echo json_encode([
@@ -259,16 +184,32 @@ switch ($action) {
         ], '*', MUST_EXIST);
         
         // Check if response already exists.
-        $existing = $DB->get_record('harpiasurvey_responses', [
-            'pageid' => $pageid,
-            'questionid' => $questionid,
-            'userid' => $USER->id
-        ]);
+        // Use SQL to properly handle NULL values for turn_id.
+        if ($turn_id !== null) {
+            // For turn evaluation questions, search with specific turn_id.
+            $existing = $DB->get_record('harpiasurvey_responses', [
+                'pageid' => $pageid,
+                'questionid' => $questionid,
+                'userid' => $USER->id,
+                'turn_id' => $turn_id
+            ]);
+        } else {
+            // For regular questions, turn_id must be NULL.
+            $existing = $DB->get_record_sql(
+                "SELECT * FROM {harpiasurvey_responses} 
+                 WHERE pageid = ? AND questionid = ? AND userid = ? AND turn_id IS NULL",
+                [$pageid, $questionid, $USER->id]
+            );
+        }
         
         if ($existing) {
             // Update existing response.
             $existing->response = $response;
             $existing->timemodified = time();
+            // Ensure turn_id is preserved on update.
+            if ($turn_id !== null) {
+                $existing->turn_id = $turn_id;
+            }
             $DB->update_record('harpiasurvey_responses', $existing);
         } else {
             // Create new response.
@@ -277,31 +218,102 @@ switch ($action) {
             $newresponse->questionid = $questionid;
             $newresponse->userid = $USER->id;
             $newresponse->response = $response;
+            // Explicitly set turn_id - use null for regular questions, integer for turn evaluations.
+            if ($turn_id !== null) {
+                $newresponse->turn_id = $turn_id;
+            } else {
+                $newresponse->turn_id = null;
+            }
             $newresponse->timecreated = time();
             $newresponse->timemodified = time();
-            $DB->insert_record('harpiasurvey_responses', $newresponse);
+            $insertedid = $DB->insert_record('harpiasurvey_responses', $newresponse);
+            
+            // Debug: Log if turn_id is being saved correctly.
+            $verify = $DB->get_record('harpiasurvey_responses', ['id' => $insertedid], 'id, turn_id, pageid, questionid, userid');
+            debugging("save_response: After insert - id = {$insertedid}, turn_id = " . var_export($verify->turn_id ?? null, true) . ", expected = " . var_export($turn_id, true), DEBUG_NORMAL);
+            if ($turn_id !== null && $verify && $verify->turn_id != $turn_id) {
+                // Log error but don't fail - this is just for debugging.
+                debugging("Warning: turn_id mismatch after insert. Expected: {$turn_id}, Got: " . var_export($verify->turn_id, true), DEBUG_NORMAL);
+            }
         }
         
         echo json_encode([
             'success' => true,
-            'message' => get_string('responsesaved', 'mod_harpiasurvey')
+            'message' => get_string('responsesaved', 'mod_harpiasurvey'),
+            'turn_id' => $turn_id // Return turn_id for confirmation.
+        ]);
+        break;
+
+    case 'get_turn_responses':
+        require_sesskey();
+
+        $turn_id = required_param('turn_id', PARAM_INT);
+
+        // Verify page belongs to this harpiasurvey instance.
+        if (!$page || $page->id != $pageid) {
+            $page = $DB->get_record('harpiasurvey_pages', ['id' => $pageid], '*', MUST_EXIST);
+        }
+        $experiment = $DB->get_record('harpiasurvey_experiments', ['id' => $page->experimentid], '*', MUST_EXIST);
+        if ($experiment->harpiasurveyid != $harpiasurvey->id) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Invalid page'
+            ]);
+            break;
+        }
+
+        // Get all responses for this turn.
+        $responses = $DB->get_records('harpiasurvey_responses', [
+            'pageid' => $pageid,
+            'userid' => $USER->id,
+            'turn_id' => $turn_id
+        ], 'questionid ASC', 'questionid, response, timemodified');
+        
+        $responsesArray = [];
+        foreach ($responses as $response) {
+            $responsesArray[$response->questionid] = [
+                'response' => $response->response,
+                'timemodified' => $response->timemodified
+            ];
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'responses' => $responsesArray
         ]);
         break;
         
     case 'send_ai_message':
         require_sesskey();
         
-        $questionid = required_param('questionid', PARAM_INT);
         $message = required_param('message', PARAM_RAW);
         $modelid = required_param('modelid', PARAM_INT);
         $parentid = optional_param('parentid', 0, PARAM_INT);
+        $requested_turn_id = optional_param('turn_id', null, PARAM_INT); // Optional: requested turn ID from frontend.
         
-        // Verify question belongs to this harpiasurvey instance and is AI conversation type.
-        $question = $DB->get_record('harpiasurvey_questions', [
-            'id' => $questionid,
-            'harpiasurveyid' => $harpiasurvey->id,
-            'type' => 'aiconversation'
-        ], '*', MUST_EXIST);
+        // Verify page belongs to this harpiasurvey instance and is aichat type.
+        // First get the page (already loaded at line 43, but we need to verify experiment).
+        if (!$page || $page->id != $pageid) {
+            $page = $DB->get_record('harpiasurvey_pages', ['id' => $pageid], '*', MUST_EXIST);
+        }
+        
+        // Get the experiment for this page.
+        $experiment = $DB->get_record('harpiasurvey_experiments', ['id' => $page->experimentid], '*', MUST_EXIST);
+        if ($experiment->harpiasurveyid != $harpiasurvey->id) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Invalid page'
+            ]);
+            break;
+        }
+        
+        if ($page->type !== 'aichat') {
+            echo json_encode([
+                'success' => false,
+                'message' => 'This page is not an AI chat page'
+            ]);
+            break;
+        }
         
         // Verify model belongs to this harpiasurvey instance and is enabled.
         $model = $DB->get_record('harpiasurvey_models', [
@@ -310,28 +322,71 @@ switch ($action) {
             'enabled' => 1
         ], '*', MUST_EXIST);
         
-        // Load question settings to get behavior and template.
-        $settings = json_decode($question->settings, true) ?? [];
-        $behavior = $settings['behavior'] ?? 'chat';
-        $template = $settings['template'] ?? '';
+        // Verify model is associated with this page.
+        $pagemodel = $DB->get_record('harpiasurvey_page_models', [
+            'pageid' => $pageid,
+            'modelid' => $modelid
+        ]);
+        if (!$pagemodel) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Model is not associated with this page'
+            ]);
+            break;
+        }
         
-        // Save user message to database.
+        // Get behavior from page (continuous, turns, multi_model).
+        $behavior = $page->behavior ?? 'continuous';
+        
+        // For turns mode, use requested turn_id if provided, otherwise calculate it.
+        $turn_id = null;
+        if ($behavior === 'turns') {
+            if ($requested_turn_id !== null) {
+                // Use the turn_id requested by the frontend (the viewing turn).
+                $turn_id = $requested_turn_id;
+            } else {
+                // Fallback: Get the last turn_id for this user and page.
+                $lastturn = $DB->get_record_sql(
+                    "SELECT MAX(turn_id) as max_turn FROM {harpiasurvey_conversations} 
+                     WHERE pageid = ? AND userid = ? AND turn_id IS NOT NULL",
+                    [$pageid, $USER->id]
+                );
+                $turn_id = ($lastturn && $lastturn->max_turn) ? ($lastturn->max_turn + 1) : 1;
+            }
+        }
+        
+        // Save user message to database (questionid is NULL for page-level conversations).
         $usermessage = new stdClass();
         $usermessage->pageid = $pageid;
-        $usermessage->questionid = $questionid;
+        $usermessage->questionid = null; // No longer tied to a question.
         $usermessage->userid = $USER->id;
         $usermessage->modelid = $modelid;
         $usermessage->role = 'user';
         $usermessage->content = $message;
         $usermessage->parentid = $parentid > 0 ? $parentid : null;
+        $usermessage->turn_id = $turn_id;
         $usermessage->timecreated = time();
         $usermessageid = $DB->insert_record('harpiasurvey_conversations', $usermessage);
         
         // Get conversation history for context (if chat mode).
         $history = [];
-        if ($behavior === 'chat') {
+        if ($behavior === 'chat' || $behavior === 'continuous') {
             $historyrecords = $DB->get_records('harpiasurvey_conversations', [
-                'questionid' => $questionid,
+                'pageid' => $pageid,
+                'userid' => $USER->id
+            ], 'timecreated ASC');
+            
+            foreach ($historyrecords as $record) {
+                $history[] = [
+                    'role' => $record->role,
+                    'content' => $record->content
+                ];
+            }
+        } else if ($behavior === 'turns') {
+            // For turns mode, get only messages from the current turn.
+            // For now, we'll get all messages (can be refined later).
+            $historyrecords = $DB->get_records('harpiasurvey_conversations', [
+                'pageid' => $pageid,
                 'userid' => $USER->id
             ], 'timecreated ASC');
             
@@ -342,13 +397,7 @@ switch ($action) {
                 ];
             }
         } else {
-            // Q&A mode: only include system template and current message.
-            if (!empty($template)) {
-                $history[] = [
-                    'role' => 'system',
-                    'content' => $template
-                ];
-            }
+            // Q&A mode: only include current message.
             $history[] = [
                 'role' => 'user',
                 'content' => $message
@@ -364,28 +413,41 @@ switch ($action) {
             // Save AI response to database (store raw markdown).
             $aimessage = new stdClass();
             $aimessage->pageid = $pageid;
-            $aimessage->questionid = $questionid;
+            $aimessage->questionid = null; // No longer tied to a question.
             $aimessage->userid = $USER->id;
             $aimessage->modelid = $modelid;
             $aimessage->role = 'assistant';
             $aimessage->content = $response['content'];
             $aimessage->parentid = $usermessageid;
+            $aimessage->turn_id = $turn_id; // Same turn_id as user message.
             $aimessage->timecreated = time();
             $aimessageid = $DB->insert_record('harpiasurvey_conversations', $aimessage);
             
             // Format content as markdown for display.
-            $formattedcontent = format_text($response['content'], FORMAT_MARKDOWN, [
+            $content = $response['content'] ?? '';
+            if (empty($content)) {
+                $content = 'Empty response from AI';
+            }
+            
+            $formattedcontent = format_text($content, FORMAT_MARKDOWN, [
                 'context' => $cm->context,
                 'noclean' => false,
                 'overflowdiv' => true
             ]);
             
+            // Ensure content is a string (format_text can return empty string but we want to be safe).
+            if (!is_string($formattedcontent)) {
+                $formattedcontent = (string)$formattedcontent;
+            }
+            
             echo json_encode([
                 'success' => true,
                 'messageid' => $aimessageid,
                 'content' => $formattedcontent,
-                'parentid' => $usermessageid
-            ]);
+                'parentid' => $usermessageid,
+                'user_message_turn_id' => $turn_id, // Turn ID for the user message.
+                'turn_id' => $turn_id // Turn ID for the AI message (same turn).
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         } else {
             echo json_encode([
                 'success' => false,
@@ -395,17 +457,33 @@ switch ($action) {
         break;
         
     case 'get_conversation_history':
-        $questionid = required_param('questionid', PARAM_INT);
+        // Verify page belongs to this harpiasurvey instance.
+        // First get the page (already loaded at line 43, but we need to verify experiment).
+        if (!$page || $page->id != $pageid) {
+            $page = $DB->get_record('harpiasurvey_pages', ['id' => $pageid], '*', MUST_EXIST);
+        }
         
-        // Verify question belongs to this harpiasurvey instance.
-        $question = $DB->get_record('harpiasurvey_questions', [
-            'id' => $questionid,
-            'harpiasurveyid' => $harpiasurvey->id
-        ], '*', MUST_EXIST);
+        // Get the experiment for this page.
+        $experiment = $DB->get_record('harpiasurvey_experiments', ['id' => $page->experimentid], '*', MUST_EXIST);
+        if ($experiment->harpiasurveyid != $harpiasurvey->id) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Invalid page'
+            ]);
+            break;
+        }
         
-        // Get conversation history for this user and question.
+        if ($page->type !== 'aichat') {
+            echo json_encode([
+                'success' => false,
+                'message' => 'This page is not an AI chat page'
+            ]);
+            break;
+        }
+        
+        // Get conversation history for this user and page.
         $messages = $DB->get_records('harpiasurvey_conversations', [
-            'questionid' => $questionid,
+            'pageid' => $pageid,
             'userid' => $USER->id
         ], 'timecreated ASC');
         
@@ -423,6 +501,75 @@ switch ($action) {
         echo json_encode([
             'success' => true,
             'messages' => $history
+        ]);
+        break;
+        
+    case 'save_turn_evaluation':
+        require_sesskey();
+        
+        $turn_id = required_param('turn_id', PARAM_INT);
+        $rating = optional_param('rating', null, PARAM_INT);
+        $comment = optional_param('comment', '', PARAM_TEXT);
+        
+        // Verify page belongs to this harpiasurvey instance.
+        if (!$page || $page->id != $pageid) {
+            $page = $DB->get_record('harpiasurvey_pages', ['id' => $pageid], '*', MUST_EXIST);
+        }
+        
+        // Get the experiment for this page.
+        $experiment = $DB->get_record('harpiasurvey_experiments', ['id' => $page->experimentid], '*', MUST_EXIST);
+        if ($experiment->harpiasurveyid != $harpiasurvey->id) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Invalid page'
+            ]);
+            break;
+        }
+        
+        // Verify turn exists and belongs to this user.
+        $turnmessage = $DB->get_record('harpiasurvey_conversations', [
+            'pageid' => $pageid,
+            'userid' => $USER->id,
+            'turn_id' => $turn_id,
+            'role' => 'assistant'
+        ]);
+        if (!$turnmessage) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Turn not found'
+            ]);
+            break;
+        }
+        
+        // Check if evaluation already exists.
+        $existing = $DB->get_record('harpiasurvey_turn_evaluations', [
+            'pageid' => $pageid,
+            'userid' => $USER->id,
+            'turn_id' => $turn_id
+        ]);
+        
+        if ($existing) {
+            // Update existing evaluation.
+            $existing->rating = $rating;
+            $existing->comment = $comment;
+            $existing->timemodified = time();
+            $DB->update_record('harpiasurvey_turn_evaluations', $existing);
+        } else {
+            // Create new evaluation.
+            $evaluation = new stdClass();
+            $evaluation->pageid = $pageid;
+            $evaluation->turn_id = $turn_id;
+            $evaluation->userid = $USER->id;
+            $evaluation->rating = $rating;
+            $evaluation->comment = $comment;
+            $evaluation->timecreated = time();
+            $evaluation->timemodified = time();
+            $DB->insert_record('harpiasurvey_turn_evaluations', $evaluation);
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'Evaluation saved'
         ]);
         break;
         

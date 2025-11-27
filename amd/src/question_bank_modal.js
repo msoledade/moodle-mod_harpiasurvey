@@ -125,17 +125,13 @@ const loadQuestions = (cmid, pageid) => {
         .then((response) => response.json())
         .then((response) => {
             if (response.success) {
-                // Mark conversation questions and add conversation data
-                const questions = response.questions.map(q => ({
-                    ...q,
-                    is_conversation_question: (q.type === 'aiconversation')
-                }));
+                // Note: evaluates_conversation_id has been removed.
+                // All questions on aichat pages automatically evaluate the page's chat conversation.
 
                 return Templates.render('mod_harpiasurvey/question_bank_modal_body', {
-                    questions: questions,
-                    has_questions: questions.length > 0,
+                    questions: response.questions,
+                    has_questions: response.questions.length > 0,
                     is_aichat_page: response.is_aichat_page || false,
-                    conversation_questions: response.conversation_questions || [],
                     cmid: cmid,
                     pageid: pageid
                 });
@@ -174,9 +170,8 @@ const addQuestionToPage = (cmid, pageid, questionId) => {
     const sesskey = Config.sesskey || M.cfg.sesskey;
     const ajaxUrl = wwwroot + '/mod/harpiasurvey/ajax.php';
 
-    // Get selected conversation ID from dropdown if it exists
-    const conversationSelect = modalInstance.getRoot().find(`.conversation-select[data-questionid="${questionId}"]`);
-    const evaluatesConversationId = conversationSelect.length > 0 ? parseInt(conversationSelect.val(), 10) || 0 : 0;
+    // Note: evaluates_conversation_id has been removed.
+    // All questions on aichat pages automatically evaluate the page's chat conversation.
 
     const params = new URLSearchParams({
         action: 'add_question_to_page',
@@ -185,10 +180,6 @@ const addQuestionToPage = (cmid, pageid, questionId) => {
         questionid: questionId,
         sesskey: sesskey
     });
-
-    if (evaluatesConversationId > 0) {
-        params.append('evaluates_conversation_id', evaluatesConversationId);
-    }
 
     fetch(ajaxUrl + '?' + params.toString())
         .then((response) => response.json())

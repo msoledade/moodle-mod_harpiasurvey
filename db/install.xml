@@ -77,6 +77,22 @@
         <INDEX NAME="unique_experiment_model" UNIQUE="true" FIELDS="experimentid, modelid" COMMENT="Ensure each experiment-model pair is unique."/>
       </INDEXES>
     </TABLE>
+    <TABLE NAME="harpiasurvey_page_models" COMMENT="Many-to-many relationship between pages and LLM models.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="pageid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="ID of the page."/>
+        <FIELD NAME="modelid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="ID of the LLM model."/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the association was created."/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_page" TYPE="foreign" FIELDS="pageid" REFTABLE="harpiasurvey_pages" REFFIELDS="id"/>
+        <KEY NAME="fk_model" TYPE="foreign" FIELDS="modelid" REFTABLE="harpiasurvey_models" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="unique_page_model" UNIQUE="true" FIELDS="pageid, modelid" COMMENT="Ensure each page-model pair is unique."/>
+      </INDEXES>
+    </TABLE>
     <TABLE NAME="harpiasurvey_pages" COMMENT="Stores internal pages within an experiment.">
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
@@ -85,6 +101,7 @@
         <FIELD NAME="description" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Description/content of the page."/>
         <FIELD NAME="descriptionformat" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Format of the description field."/>
         <FIELD NAME="type" TYPE="char" LENGTH="50" NOTNULL="false" SEQUENCE="false" COMMENT="Type of page (opening, demographic, interaction, feedback, aichat)."/>
+        <FIELD NAME="behavior" TYPE="char" LENGTH="50" NOTNULL="false" DEFAULT="continuous" SEQUENCE="false" COMMENT="Behavior mode: continuous (default), turns (turn-based navigation), multi_model (future)."/>
         <FIELD NAME="available" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Whether the page is available (0 = disabled, 1 = enabled)."/>
         <FIELD NAME="sortorder" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Sort order for displaying pages."/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the page was created."/>
@@ -103,7 +120,7 @@
         <FIELD NAME="shortname" TYPE="char" LENGTH="50" NOTNULL="false" SEQUENCE="false" COMMENT="Short name/code for the question."/>
         <FIELD NAME="description" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Question text/description."/>
         <FIELD NAME="descriptionformat" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Format of the description field."/>
-        <FIELD NAME="type" TYPE="char" LENGTH="50" NOTNULL="true" SEQUENCE="false" COMMENT="Question type (singlechoice, multiplechoice, select, likert, number, shorttext, longtext, aiconversation)."/>
+        <FIELD NAME="type" TYPE="char" LENGTH="50" NOTNULL="true" SEQUENCE="false" COMMENT="Question type (singlechoice, multiplechoice, select, likert, number, shorttext, longtext)."/>
         <FIELD NAME="settings" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="JSON string storing type-specific settings (number settings, AI settings, etc.)."/>
         <FIELD NAME="enabled" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Whether the question is enabled (0 = disabled, 1 = enabled)."/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the question was created."/>
@@ -135,14 +152,13 @@
         <FIELD NAME="questionid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="ID of the question."/>
         <FIELD NAME="enabled" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Whether the question is enabled on this page (0 = disabled, 1 = enabled)."/>
         <FIELD NAME="sortorder" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Sort order for displaying questions on the page."/>
-        <FIELD NAME="evaluates_conversation_id" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="ID of the conversation question this question evaluates (NULL if not an evaluation question)."/>
+        <FIELD NAME="min_turn" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Minimum turn number for this question to appear (NULL or 1 = appears from first turn, 2 = from second turn, etc.). Only used for aichat pages with turns mode."/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the association was created."/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="fk_page" TYPE="foreign" FIELDS="pageid" REFTABLE="harpiasurvey_pages" REFFIELDS="id"/>
         <KEY NAME="fk_question" TYPE="foreign" FIELDS="questionid" REFTABLE="harpiasurvey_questions" REFFIELDS="id"/>
-        <KEY NAME="fk_evaluates_conversation" TYPE="foreign" FIELDS="evaluates_conversation_id" REFTABLE="harpiasurvey_questions" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
         <INDEX NAME="unique_page_question" UNIQUE="true" FIELDS="pageid, questionid" COMMENT="Ensure each page-question pair is unique."/>
@@ -155,6 +171,7 @@
         <FIELD NAME="questionid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="ID of the question."/>
         <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="ID of the user who responded."/>
         <FIELD NAME="response" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="The response value (can be JSON for multiple choice)."/>
+        <FIELD NAME="turn_id" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="ID of the turn this response evaluates (NULL for regular page questions, set for turn evaluation questions)."/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the response was created."/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the response was last modified."/>
       </FIELDS>
@@ -165,31 +182,51 @@
         <KEY NAME="fk_user" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
-        <INDEX NAME="unique_user_page_question" UNIQUE="true" FIELDS="userid, pageid, questionid" COMMENT="Ensure each user can only have one response per question per page."/>
+        <INDEX NAME="unique_user_page_question" UNIQUE="true" FIELDS="userid, pageid, questionid, turn_id" COMMENT="Ensure each user can only have one response per question per page per turn."/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="harpiasurvey_conversations" COMMENT="Stores conversation messages for AI conversation questions.">
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="pageid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="ID of the page."/>
-        <FIELD NAME="questionid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="ID of the question."/>
+        <FIELD NAME="questionid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="ID of the question (NULL for page-level conversations, set for question-specific conversations)."/>
         <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="ID of the user who sent/received the message."/>
         <FIELD NAME="modelid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="ID of the LLM model used for this message."/>
         <FIELD NAME="role" TYPE="char" LENGTH="20" NOTNULL="true" SEQUENCE="false" COMMENT="Message role: user or assistant."/>
         <FIELD NAME="content" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="Message content."/>
         <FIELD NAME="parentid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="ID of the parent message (for threading)."/>
+        <FIELD NAME="turn_id" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="ID of the turn this message belongs to (NULL for continuous mode, set for turns mode)."/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the message was created."/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="fk_page" TYPE="foreign" FIELDS="pageid" REFTABLE="harpiasurvey_pages" REFFIELDS="id"/>
-        <KEY NAME="fk_question" TYPE="foreign" FIELDS="questionid" REFTABLE="harpiasurvey_questions" REFFIELDS="id"/>
         <KEY NAME="fk_user" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
         <KEY NAME="fk_model" TYPE="foreign" FIELDS="modelid" REFTABLE="harpiasurvey_models" REFFIELDS="id"/>
         <KEY NAME="fk_parent" TYPE="foreign" FIELDS="parentid" REFTABLE="harpiasurvey_conversations" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
-        <INDEX NAME="idx_user_question" UNIQUE="false" FIELDS="userid, questionid" COMMENT="Index for loading conversation history."/>
+        <INDEX NAME="idx_user_page" UNIQUE="false" FIELDS="userid, pageid" COMMENT="Index for loading conversation history by page."/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="harpiasurvey_turn_evaluations" COMMENT="Stores user evaluations of AI responses in turns mode.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="pageid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="ID of the page."/>
+        <FIELD NAME="turn_id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="ID of the turn being evaluated."/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="ID of the user who evaluated."/>
+        <FIELD NAME="rating" TYPE="int" LENGTH="1" NOTNULL="false" SEQUENCE="false" COMMENT="Rating value (1-5 or NULL if not rated)."/>
+        <FIELD NAME="comment" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Optional comment about the turn."/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the evaluation was created."/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp of when the evaluation was last modified."/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_page" TYPE="foreign" FIELDS="pageid" REFTABLE="harpiasurvey_pages" REFFIELDS="id"/>
+        <KEY NAME="fk_user" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="unique_user_turn" UNIQUE="true" FIELDS="userid, pageid, turn_id" COMMENT="Ensure each user can only evaluate each turn once."/>
       </INDEXES>
     </TABLE>
   </TABLES>

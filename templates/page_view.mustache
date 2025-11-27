@@ -46,18 +46,107 @@
         </div>
     {{/has_description}}
     
+    {{! AI Chat interface (rendered at page level, not as a question) - appears before questions }}
+    {{#is_aichat_page}}
+        <div class="ai-conversation-container mb-4 mt-4" data-cmid="{{cmid}}" data-pageid="{{pageid}}" data-behavior="{{aichat.behavior}}" {{#aichat.has_models}}data-models="{{#aichat.models}}{{id}}{{^@last}},{{/@last}}{{/aichat.models}}"{{/aichat.has_models}}>
+            {{#aichat.has_turn_evaluation_questions}}
+                <script type="application/json" id="turn-evaluation-questions-data-{{pageid}}">{{{aichat.turn_evaluation_questions_json}}}</script>
+            {{/aichat.has_turn_evaluation_questions}}
+            {{#aichat.has_models}}
+                {{! Display model identifier(s) above chat window }}
+                <div class="mb-2">
+                    <small class="text-muted">
+                        <strong>{{#str}}aimodels, mod_harpiasurvey{{/str}}:</strong>
+                        {{#aichat.models}}{{model}}{{^@last}}, {{/@last}}{{/aichat.models}}
+                    </small>
+                </div>
+            {{/aichat.has_models}}
+            {{^aichat.has_models}}
+                {{! No models available message }}
+                <div class="alert alert-warning mb-2">
+                    <small>{{#str}}nomodelsavailable, mod_harpiasurvey{{/str}}</small>
+                </div>
+            {{/aichat.has_models}}
+            
+            {{! Turn navigation controls (only for turns mode) }}
+            {{#aichat.is_turns_mode}}
+                <div class="turn-navigation mb-2 d-flex justify-content-between align-items-center">
+                    <div class="turn-info">
+                        <span class="badge badge-info" id="current-turn-badge-{{pageid}}">
+                            {{#str}}turn, mod_harpiasurvey{{/str}}: <span id="current-turn-number-{{pageid}}">1</span>
+                        </span>
+                    </div>
+                    <div class="turn-controls">
+                        <button type="button" class="btn btn-sm btn-outline-secondary prev-turn-btn" data-pageid="{{pageid}}" style="display: none;">
+                            <i class="fa fa-chevron-left"></i> {{#str}}previousturn, mod_harpiasurvey{{/str}}
+                        </button>
+                        <button type="button" class="btn btn-sm btn-primary next-turn-btn" data-pageid="{{pageid}}" data-cmid="{{cmid}}">
+                            {{#str}}createnextturn, mod_harpiasurvey{{/str}} <i class="fa fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+            {{/aichat.is_turns_mode}}
+            
+            {{! Show previous messages toggle (only for turns mode) }}
+            {{#aichat.is_turns_mode}}
+                <div class="mb-2" id="previous-messages-toggle-{{pageid}}" style="display: none;">
+                    <button type="button" class="btn btn-sm btn-outline-secondary show-previous-messages-btn" data-pageid="{{pageid}}">
+                        <i class="fa fa-chevron-down"></i> {{#str}}showpreviousmessages, mod_harpiasurvey{{/str}}
+                    </button>
+                </div>
+            {{/aichat.is_turns_mode}}
+            
+            {{! Chat messages area }}
+            <div class="chat-messages border rounded p-3 mb-2" id="chat-messages-page-{{pageid}}" style="max-height: 400px; overflow-y: auto; background-color: #f8f9fa;">
+                {{#aichat.has_history}}
+                    {{#aichat.conversation_history}}
+                        {{#role.user}}
+                            {{> mod_harpiasurvey/chat_user_message }}
+                        {{/role.user}}
+                        {{#role.assistant}}
+                            {{> mod_harpiasurvey/chat_ai_message }}
+                        {{/role.assistant}}
+                    {{/aichat.conversation_history}}
+                {{/aichat.has_history}}
+                {{^aichat.has_history}}
+                    <div class="text-muted text-center small py-3">
+                        {{#str}}aiconversationplaceholder, mod_harpiasurvey{{/str}}
+                    </div>
+                {{/aichat.has_history}}
+            </div>
+            
+            {{! Input area }}
+            <div class="input-group">
+                <textarea class="form-control chat-input" id="chat-input-page-{{pageid}}" rows="2" placeholder="{{#str}}typeyourmessage, mod_harpiasurvey{{/str}}"></textarea>
+                <button class="btn btn-primary chat-send-btn" type="button" data-cmid="{{cmid}}" data-pageid="{{pageid}}">
+                    <i class="fa fa-arrow-up"></i>
+                </button>
+            </div>
+            {{#aichat.is_turns_mode}}
+                <div class="mt-2 text-muted small" id="turn-locked-message-{{pageid}}" style="display: none;">
+                    <i class="fa fa-lock"></i> {{#str}}turnlocked, mod_harpiasurvey{{/str}}
+                </div>
+            {{/aichat.is_turns_mode}}
+            
+            {{! Loading indicator (hidden by default) }}
+            <div class="chat-loading mt-2" id="chat-loading-page-{{pageid}}" style="display: none;">
+                {{> mod_harpiasurvey/chat_loading }}
+            </div>
+            
+            {{! Turn evaluation questions container (for turns mode) - appears below chat }}
+            {{#aichat.is_turns_mode}}
+                <div class="turn-evaluation-questions-container mt-4" id="turn-evaluation-questions-container-{{pageid}}">
+                    {{! Questions will be dynamically loaded here based on current turn }}
+                </div>
+            {{/aichat.is_turns_mode}}
+        </div>
+    {{/is_aichat_page}}
+    
     {{#has_questions}}
         <div class="page-questions mt-4">
             {{#questions}}
                 <div class="question-item mb-4" data-questionid="{{id}}" data-questiontype="{{type}}">
                     <h5>{{name}}</h5>
-                    {{#evaluatesconversation}}
-                        <div class="mb-2">
-                            <span class="badge badge-info">
-                                <i class="fa fa-comments" aria-hidden="true"></i> {{#str}}evaluatesconversation, mod_harpiasurvey{{/str}}: {{evaluatesconversation}}
-                            </span>
-                        </div>
-                    {{/evaluatesconversation}}
                     <div class="question-description mb-2">
                         {{{description}}}
                     </div>
@@ -118,72 +207,18 @@
                         {{#is_longtext}}
                             <textarea class="form-control" name="question_{{id}}" id="question_{{id}}" rows="4">{{#has_saved_response}}{{saved_response}}{{/has_saved_response}}</textarea>
                         {{/is_longtext}}
-                        {{#is_aiconversation}}
-                            {{! AI Conversation chat interface }}
-                            <div class="ai-conversation-container" data-questionid="{{id}}" data-cmid="{{cmid}}" data-pageid="{{pageid}}" data-behavior="{{aiconversation.behavior}}" {{#aiconversation.has_models}}data-models="{{#aiconversation.models}}{{id}}{{^@last}},{{/@last}}{{/aiconversation.models}}"{{/aiconversation.has_models}}>
-                                {{#aiconversation.has_models}}
-                                    {{! Display model identifier(s) above chat window }}
-                                    <div class="mb-2">
-                                        <small class="text-muted">
-                                            <strong>{{#str}}aimodels, mod_harpiasurvey{{/str}}:</strong>
-                                            {{#aiconversation.models}}{{model}}{{^@last}}, {{/@last}}{{/aiconversation.models}}
-                                        </small>
-                                    </div>
-                                {{/aiconversation.has_models}}
-                                {{^aiconversation.has_models}}
-                                    {{! No models available message }}
-                                    <div class="alert alert-warning mb-2">
-                                        <small>{{#str}}nomodelsavailable, mod_harpiasurvey{{/str}}</small>
-                                    </div>
-                                {{/aiconversation.has_models}}
-                                
-                                {{! Chat messages area }}
-                                <div class="chat-messages border rounded p-3 mb-2" id="chat-messages-{{id}}" style="max-height: 400px; overflow-y: auto; background-color: #f8f9fa;">
-                                    {{#aiconversation.has_history}}
-                                        {{#aiconversation.conversation_history}}
-                                            {{#role.user}}
-                                                {{> mod_harpiasurvey/chat_user_message }}
-                                            {{/role.user}}
-                                            {{#role.assistant}}
-                                                {{> mod_harpiasurvey/chat_ai_message }}
-                                            {{/role.assistant}}
-                                        {{/aiconversation.conversation_history}}
-                                    {{/aiconversation.has_history}}
-                                    {{^aiconversation.has_history}}
-                                        <div class="text-muted text-center small py-3">
-                                            {{#str}}aiconversationplaceholder, mod_harpiasurvey{{/str}}
-                                        </div>
-                                    {{/aiconversation.has_history}}
-                                </div>
-                                
-                                {{! Input area }}
-                                <div class="input-group">
-                                    <textarea class="form-control chat-input" id="chat-input-{{id}}" rows="2" placeholder="{{#str}}typeyourmessage, mod_harpiasurvey{{/str}}"></textarea>
-                                    <button class="btn btn-primary chat-send-btn" type="button" data-questionid="{{id}}" data-cmid="{{cmid}}" data-pageid="{{pageid}}">
-                                        <i class="fa fa-arrow-up"></i>
-                                    </button>
-                                </div>
-                                
-                                {{! Loading indicator (hidden by default) }}
-                                <div class="chat-loading mt-2" id="chat-loading-{{id}}" style="display: none;">
-                                    {{> mod_harpiasurvey/chat_loading }}
-                                </div>
-                            </div>
-                        {{/is_aiconversation}}
                     {{/has_options}}
                     
-                    {{! Saved response message for each question (not shown for AI conversations) }}
-                    {{^is_aiconversation}}
-                        {{#has_saved_response}}
-                            <div class="mt-2 small text-muted saved-response-message" data-questionid="{{id}}">
-                                <i class="fa fa-check-circle" aria-hidden="true"></i> {{#str}}saved, mod_harpiasurvey{{/str}} {{#str}}on, mod_harpiasurvey{{/str}} {{saved_datetime}}
-                            </div>
-                        {{/has_saved_response}}
-                    {{/is_aiconversation}}
+                    {{! Saved response message for each question }}
+                    {{#has_saved_response}}
+                        <div class="mt-2 small text-muted saved-response-message" data-questionid="{{id}}">
+                            <i class="fa fa-check-circle" aria-hidden="true"></i> {{#str}}saved, mod_harpiasurvey{{/str}} {{#str}}on, mod_harpiasurvey{{/str}} {{saved_datetime}}
+                        </div>
+                    {{/has_saved_response}}
                 </div>
             {{/questions}}
             
-            {{! Single save button at the end of all questions (only show if there are non-AI conversation questions) }}
+            {{! Single save button at the end of all questions (only show if there are questions) }}
             {{#has_non_aiconversation_questions}}
                 <div class="mt-4 text-center">
                     <button type="button" class="btn btn-primary btn-lg save-all-responses-btn" 

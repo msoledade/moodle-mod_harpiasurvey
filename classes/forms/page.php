@@ -125,10 +125,10 @@ class page extends \moodleform {
 
         // Type dropdown.
         $typeoptions = [
-            'opening' => get_string('typeopening', 'mod_harpiasurvey'),
-            'demographic' => get_string('typedemographic', 'mod_harpiasurvey'),
-            'interaction' => get_string('typeinteraction', 'mod_harpiasurvey'),
-            'feedback' => get_string('typefeedback', 'mod_harpiasurvey'),
+            'opening' => get_string('typegeneral', 'mod_harpiasurvey'),
+            // 'demographic' => get_string('typedemographic', 'mod_harpiasurvey'),
+            // 'interaction' => get_string('typeinteraction', 'mod_harpiasurvey'),
+            // 'feedback' => get_string('typefeedback', 'mod_harpiasurvey'),
             'aichat' => get_string('typeaichat', 'mod_harpiasurvey'),
         ];
         $mform->addElement('select', 'type', get_string('type', 'mod_harpiasurvey'), $typeoptions);
@@ -137,6 +137,68 @@ class page extends \moodleform {
             $mform->setDefault('type', $this->_customdata->type);
         } else {
             $mform->setDefault('type', 'opening');
+        }
+        
+        // Behavior dropdown (only for aichat pages).
+        $behavioroptions = [
+            'continuous' => get_string('pagebehaviorcontinuous', 'mod_harpiasurvey'),
+            'turns' => get_string('pagebehaviorturns', 'mod_harpiasurvey'),
+            'multi_model' => get_string('pagebehaviormultimodel', 'mod_harpiasurvey'),
+        ];
+        $mform->addElement('select', 'behavior', get_string('pagebehavior', 'mod_harpiasurvey'), $behavioroptions);
+        $mform->addHelpButton('behavior', 'pagebehavior', 'mod_harpiasurvey');
+        $mform->setType('behavior', PARAM_ALPHANUMEXT);
+        if (isset($this->_customdata->behavior)) {
+            $mform->setDefault('behavior', $this->_customdata->behavior);
+        } else {
+            $mform->setDefault('behavior', 'continuous');
+        }
+        // Only show behavior field for aichat pages.
+        $mform->hideIf('behavior', 'type', 'neq', 'aichat');
+
+        // Model selection (only for aichat pages, and only when behavior is not multi_model).
+        global $DB;
+        $harpiasurveyid = isset($this->_customdata->harpiasurveyid) ? $this->_customdata->harpiasurveyid : 0;
+        if ($harpiasurveyid) {
+            $models = $DB->get_records('harpiasurvey_models', ['harpiasurveyid' => $harpiasurveyid, 'enabled' => 1], 'name ASC');
+            $modeloptions = [];
+            foreach ($models as $model) {
+                $modeloptions[$model->id] = $model->name . ' (' . $model->model . ')';
+            }
+            
+            if (!empty($modeloptions)) {
+                // Load selected models for this page BEFORE adding the element.
+                $pageid = isset($this->_customdata->id) ? $this->_customdata->id : 0;
+                $selectedmodelids = [];
+                if ($pageid) {
+                    $selectedmodels = $DB->get_records('harpiasurvey_page_models', ['pageid' => $pageid], '', 'modelid');
+                    $selectedmodelids = array_keys($selectedmodels);
+                }
+                
+                $mform->addElement('autocomplete', 'pagemodels', get_string('aimodels', 'mod_harpiasurvey'), $modeloptions, [
+                    'multiple' => true,
+                    'noselectionstring' => get_string('noselection', 'mod_harpiasurvey'),
+                ]);
+                $mform->setType('pagemodels', PARAM_INT);
+                $mform->addHelpButton('pagemodels', 'aimodels', 'mod_harpiasurvey');
+                
+                // Set default values if we have selected models.
+                // Note: setDefault must be called before hideIf to ensure values are loaded.
+                if (!empty($selectedmodelids)) {
+                    $mform->setDefault('pagemodels', $selectedmodelids);
+                }
+                
+                // Only show when type is aichat and behavior is not multi_model.
+                // hideIf must be called after setDefault to ensure values are preserved.
+                $mform->hideIf('pagemodels', 'type', 'neq', 'aichat');
+                $mform->hideIf('pagemodels', 'behavior', 'eq', 'multi_model');
+            } else {
+                // Even if no models are available, add a message field to inform the user.
+                $mform->addElement('static', 'pagemodels_none', '', 
+                    '<div class="alert alert-info">' . get_string('nomodelsavailable', 'mod_harpiasurvey') . '</div>');
+                $mform->hideIf('pagemodels_none', 'type', 'neq', 'aichat');
+                $mform->hideIf('pagemodels_none', 'behavior', 'eq', 'multi_model');
+            }
         }
 
         // Available field (checkbox/toggle).
@@ -158,31 +220,12 @@ class page extends \moodleform {
         if ($pageid) {
             // Load questions for this page.
             global $DB, $OUTPUT;
-            $page_type = isset($this->_customdata->type) ? $this->_customdata->type : '';
-            $is_aichat = ($page_type === 'aichat');
-            
-            // Get conversation questions for dropdown (only for aichat pages).
-            $conversationquestions = [];
-            if ($is_aichat) {
-                $conversationquestions_sql = "SELECT pq.questionid, q.name
-                                                FROM {harpiasurvey_page_questions} pq
-                                                JOIN {harpiasurvey_questions} q ON q.id = pq.questionid
-                                               WHERE pq.pageid = :pageid AND q.type = 'aiconversation' AND pq.enabled = 1
-                                            ORDER BY pq.sortorder ASC";
-                $conversationrecords = $DB->get_records_sql($conversationquestions_sql, ['pageid' => $pageid]);
-                foreach ($conversationrecords as $conv) {
-                    $conversationquestions[$conv->questionid] = format_string($conv->name);
-                }
-            }
             
             $pagequestions = $DB->get_records_sql(
-                "SELECT pq.id, pq.pageid, pq.questionid, pq.enabled, pq.sortorder, 
-                        pq.evaluates_conversation_id, pq.timecreated,
-                        q.name, q.type,
-                        cq.name AS evaluates_conversation_name
+                "SELECT pq.id, pq.pageid, pq.questionid, pq.enabled, pq.sortorder, pq.timecreated,
+                        q.name, q.type
                    FROM {harpiasurvey_page_questions} pq
                    JOIN {harpiasurvey_questions} q ON q.id = pq.questionid
-              LEFT JOIN {harpiasurvey_questions} cq ON cq.id = pq.evaluates_conversation_id
                   WHERE pq.pageid = :pageid
                   ORDER BY pq.sortorder ASC",
                 ['pageid' => $pageid]
@@ -197,9 +240,6 @@ class page extends \moodleform {
                 $questionstable .= '<tr>';
                 $questionstable .= '<th scope="col">' . get_string('question', 'mod_harpiasurvey') . '</th>';
                 $questionstable .= '<th scope="col">' . get_string('type', 'mod_harpiasurvey') . '</th>';
-                if ($is_aichat) {
-                    $questionstable .= '<th scope="col">' . get_string('evaluatesconversation', 'mod_harpiasurvey') . '</th>';
-                }
                 $questionstable .= '<th scope="col">' . get_string('enabled', 'mod_harpiasurvey') . '</th>';
                 $questionstable .= '<th scope="col">' . get_string('actions', 'mod_harpiasurvey') . '</th>';
                 $questionstable .= '</tr>';
@@ -210,30 +250,6 @@ class page extends \moodleform {
                     $questionstable .= '<tr>';
                     $questionstable .= '<td>' . format_string($pq->name) . '</td>';
                     $questionstable .= '<td>' . get_string('type' . $pq->type, 'mod_harpiasurvey') . '</td>';
-                    
-                    // Evaluates conversation column (only for aichat pages).
-                    if ($is_aichat) {
-                        if ($pq->type === 'aiconversation') {
-                            $questionstable .= '<td><span class="text-muted">—</span></td>';
-                        } else {
-                            // Create dropdown for selecting conversation.
-                            $selectid = 'evaluates_conversation_' . $pq->id;
-                            // Get the current value, ensuring it's an integer (NULL becomes 0).
-                            $currentvalue = isset($pq->evaluates_conversation_id) && $pq->evaluates_conversation_id !== null 
-                                ? (int)$pq->evaluates_conversation_id 
-                                : 0;
-                            $questionstable .= '<td>';
-                            $questionstable .= '<select class="form-select form-select-sm evaluates-conversation-select" id="' . $selectid . '" data-pagequestionid="' . $pq->id . '" data-cmid="' . $cmid . '">';
-                            $questionstable .= '<option value="0">' . get_string('none', 'mod_harpiasurvey') . '</option>';
-                            foreach ($conversationquestions as $conv_id => $conv_name) {
-                                // Use strict comparison with both values cast to int.
-                                $selected = ((int)$currentvalue === (int)$conv_id) ? ' selected' : '';
-                                $questionstable .= '<option value="' . (int)$conv_id . '"' . $selected . '>' . htmlspecialchars($conv_name) . '</option>';
-                            }
-                            $questionstable .= '</select>';
-                            $questionstable .= '</td>';
-                        }
-                    }
                     
                     // Enabled checkbox.
                     $enabledid = 'question_enabled_' . $pq->id;
@@ -294,6 +310,33 @@ class page extends \moodleform {
             'overflowdiv' => true,
             'enable_filemanagement' => true,
         ];
+    }
+
+    /**
+     * Override definition_after_data to ensure autocomplete values are set correctly.
+     */
+    public function definition_after_data() {
+        parent::definition_after_data();
+        
+        // Ensure pagemodels values are set if they exist in customdata.
+        $mform = $this->_form;
+        $pageid = isset($this->_customdata->id) ? $this->_customdata->id : 0;
+        
+        if ($pageid && $mform->elementExists('pagemodels')) {
+            global $DB;
+            $selectedmodels = $DB->get_records('harpiasurvey_page_models', ['pageid' => $pageid], '', 'modelid');
+            $selectedmodelids = array_keys($selectedmodels);
+            
+            if (!empty($selectedmodelids)) {
+                // Get current value from form.
+                $currentvalue = $mform->getElementValue('pagemodels');
+                
+                // If no value is set, set it to the selected models.
+                if (empty($currentvalue)) {
+                    $mform->setDefault('pagemodels', $selectedmodelids);
+                }
+            }
+        }
     }
 }
 

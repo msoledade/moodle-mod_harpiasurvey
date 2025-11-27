@@ -136,11 +136,17 @@ class page_view implements renderable, templatable {
 
         // Prepare questions for rendering.
         $questionslist = [];
+        $turnevaluationquestions = []; // Questions that evaluate turns (for aichat pages with turns mode).
         $hasnonaiconversationquestions = false;
+        
         foreach ($this->questions as $question) {
             if (!$question->enabled) {
                 continue; // Skip disabled questions.
             }
+
+            // Note: For aichat pages with turns mode, questions are also processed as turn evaluation questions
+            // below, but they should still appear in the regular questions list so users can see them from the start.
+            // They will appear both in the regular list and dynamically when turns are created.
 
             global $DB;
             
@@ -240,72 +246,8 @@ class page_view implements renderable, templatable {
             $savedresponsevalue = $savedresponse;
             $savedtimestamp = $responsetimestamps[$question->questionid] ?? null;
             
-            // AI Conversation specific data.
-            $aiconversationdata = [];
-            if ($question->type === 'aiconversation') {
-                // Load available models for this question.
-                $modelids = $settings['models'] ?? [];
-                $models = [];
-                if (!empty($modelids)) {
-                    $modelsrecords = $DB->get_records_list('harpiasurvey_models', 'id', $modelids, 'name ASC');
-                    foreach ($modelsrecords as $model) {
-                        if ($model->enabled) {
-                            $models[] = [
-                                'id' => $model->id,
-                                'name' => format_string($model->name),
-                                'model' => $model->model // Full model identifier (e.g., gpt-4o-2024-08-06)
-                            ];
-                        }
-                    }
-                }
-                
-                // Load conversation history.
-                $conversationhistory = [];
-                if ($this->pageid && $USER->id) {
-                    $messages = $DB->get_records('harpiasurvey_conversations', [
-                        'pageid' => $this->pageid,
-                        'questionid' => $question->questionid,
-                        'userid' => $USER->id
-                    ], 'timecreated ASC');
-                    
-                    foreach ($messages as $msg) {
-                        $roleobj = new \stdClass();
-                        $roleobj->{$msg->role} = true;
-                        
-                        $conversationhistory[] = [
-                            'id' => $msg->id,
-                            'role' => $roleobj,
-                            'content' => format_text($msg->content, FORMAT_MARKDOWN, [
-                                'context' => $this->context,
-                                'noclean' => false,
-                                'overflowdiv' => true
-                            ]),
-                            'parentid' => $msg->parentid,
-                            'timecreated' => $msg->timecreated
-                        ];
-                    }
-                }
-                
-                $aiconversationdata = [
-                    'models' => $models,
-                    'has_models' => !empty($models),
-                    'behavior' => $settings['behavior'] ?? 'chat',
-                    'template' => $settings['template'] ?? '',
-                    'conversation_history' => $conversationhistory,
-                    'has_history' => !empty($conversationhistory)
-                ];
-            }
-            
-            // Get evaluates conversation name if available (for display reference).
-            $evaluatesconversation = '';
-            if (!empty($question->evaluates_conversation_id) && !empty($question->evaluates_conversation_name)) {
-                $evaluatesconversation = format_string($question->evaluates_conversation_name);
-            }
-            
-            // Track if we have non-AI conversation questions.
-            if ($question->type !== 'aiconversation') {
-                $hasnonaiconversationquestions = true;
-            }
+            // Track if we have questions (all questions are now regular questions, no aiconversation type).
+            $hasnonaiconversationquestions = true;
             
             $questionslist[] = [
                 'id' => $question->questionid,
@@ -316,7 +258,6 @@ class page_view implements renderable, templatable {
                     'noclean' => false,
                     'overflowdiv' => true
                 ]),
-                'evaluatesconversation' => $evaluatesconversation,
                 'options' => $options,
                 'has_options' => !empty($options),
                 'is_multiplechoice' => $ismultiplechoice,
@@ -326,8 +267,6 @@ class page_view implements renderable, templatable {
                 'numbersettings' => $numbersettings,
                 'is_shorttext' => ($question->type === 'shorttext'),
                 'is_longtext' => ($question->type === 'longtext'),
-                'is_aiconversation' => ($question->type === 'aiconversation'),
-                'aiconversation' => $aiconversationdata,
                 'saved_response' => $savedresponsevalue,
                 'has_saved_response' => !empty($savedresponsevalue),
                 'saved_timestamp' => $savedtimestamp,
@@ -335,6 +274,108 @@ class page_view implements renderable, templatable {
                 'cmid' => $this->cmid,
                 'pageid' => $this->pageid,
             ];
+        }
+
+        // Now process turn evaluation questions (for aichat pages with turns mode).
+        // In aichat pages, all questions evaluate the page's chat conversation.
+        if ($this->page->type === 'aichat' && ($this->page->behavior ?? 'continuous') === 'turns') {
+            foreach ($this->questions as $question) {
+                if (!$question->enabled) {
+                    continue;
+                }
+
+                // For turns mode pages, if min_turn is not set, default to 1 (appears from first turn).
+                // This allows questions added before min_turn was implemented to still work.
+                $minturn = isset($question->min_turn) && $question->min_turn !== null ? $question->min_turn : 1;
+
+                // Load question data (similar to regular questions).
+                $settings = [];
+                if (!empty($question->settings)) {
+                    $settings = json_decode($question->settings, true) ?? [];
+                }
+
+                // Get question options if it's a choice/select question.
+                $options = [];
+                $inputtype = 'radio';
+                $ismultiplechoice = false;
+                if (in_array($question->type, ['singlechoice', 'multiplechoice', 'select', 'likert'])) {
+                    $inputtype = ($question->type === 'singlechoice' || $question->type === 'select' || $question->type === 'likert') ? 'radio' : 'checkbox';
+                    $ismultiplechoice = ($question->type === 'multiplechoice');
+                    
+                    if ($question->type === 'likert') {
+                        for ($i = 1; $i <= 5; $i++) {
+                            $options[] = [
+                                'id' => $i,
+                                'value' => (string)$i,
+                                'isdefault' => false,
+                                'inputtype' => 'radio',
+                                'questionid' => $question->questionid,
+                                'nameattr' => 'question_' . $question->questionid . '_turn',
+                            ];
+                        }
+                    } else {
+                        $questionoptions = $DB->get_records('harpiasurvey_question_options', [
+                            'questionid' => $question->questionid
+                        ], 'sortorder ASC');
+                        $nameattr = 'question_' . $question->questionid . '_turn';
+                        if ($ismultiplechoice) {
+                            $nameattr .= '[]';
+                        }
+                        foreach ($questionoptions as $opt) {
+                            $options[] = [
+                                'id' => $opt->id,
+                                'value' => format_string($opt->value),
+                                'isdefault' => (bool)$opt->isdefault,
+                                'inputtype' => $inputtype,
+                                'questionid' => $question->questionid,
+                                'nameattr' => $nameattr,
+                            ];
+                        }
+                    }
+                }
+
+                // Number field settings.
+                $numbersettings = [];
+                if ($question->type === 'number') {
+                    $min = $settings['min'] ?? null;
+                    $max = $settings['max'] ?? null;
+                    $allownegatives = !empty($settings['allownegatives']);
+                    if (!$allownegatives && $min === null) {
+                        $min = 0;
+                    }
+                    $numbersettings = [
+                        'has_min' => $min !== null,
+                        'min_value' => $min,
+                        'has_max' => $max !== null,
+                        'max_value' => $max,
+                        'default' => $settings['default'] ?? null,
+                        'step' => ($settings['numbertype'] ?? 'integer') === 'integer' ? 1 : 0.01,
+                    ];
+                }
+
+                $turnevaluationquestions[] = [
+                    'id' => $question->questionid,
+                    'name' => format_string($question->name),
+                    'type' => $question->type,
+                    'description' => format_text($question->description, $question->descriptionformat, [
+                        'context' => $this->context,
+                        'noclean' => false,
+                        'overflowdiv' => true
+                    ]),
+                    'options' => $options,
+                    'has_options' => !empty($options),
+                    'is_multiplechoice' => $ismultiplechoice,
+                    'is_select' => ($question->type === 'select'),
+                    'is_likert' => ($question->type === 'likert'),
+                    'is_number' => ($question->type === 'number'),
+                    'numbersettings' => $numbersettings,
+                    'is_shorttext' => ($question->type === 'shorttext'),
+                    'is_longtext' => ($question->type === 'longtext'),
+                    'min_turn' => $minturn, // Use calculated min_turn (defaults to 1 if not set).
+                    'cmid' => $this->cmid,
+                    'pageid' => $this->pageid,
+                ];
+            }
         }
 
         // Calculate pagination.
@@ -404,6 +445,97 @@ class page_view implements renderable, templatable {
             }
         }
 
+        // Load AI chat data if this is an aichat page (chat is part of the page, not a question).
+        $aichatdata = [];
+        $hasaichat = false;
+        $pagebehavior = $this->page->behavior ?? 'continuous';
+        $isturnsmode = ($pagebehavior === 'turns');
+        
+        // Check if page type is aichat and behavior is not multi_model.
+        if ($this->page->type === 'aichat' && $pagebehavior !== 'multi_model') {
+            $hasaichat = true;
+            
+            // Load models associated with this page.
+            $pagemodels = $DB->get_records('harpiasurvey_page_models', ['pageid' => $this->pageid], '', 'modelid');
+            $modelids = array_keys($pagemodels);
+            $models = [];
+            if (!empty($modelids)) {
+                $modelsrecords = $DB->get_records_list('harpiasurvey_models', 'id', $modelids, 'name ASC');
+                foreach ($modelsrecords as $model) {
+                    if ($model->enabled) {
+                        $models[] = [
+                            'id' => $model->id,
+                            'name' => format_string($model->name),
+                            'model' => $model->model // Full model identifier (e.g., gpt-4o-2024-08-06)
+                        ];
+                    }
+                }
+            }
+            // Note: Chat will appear even without models (showing a warning message)
+            
+            // Load conversation history for this page (not tied to a question anymore).
+            $conversationhistory = [];
+            if ($this->pageid && $USER->id) {
+                $messages = $DB->get_records('harpiasurvey_conversations', [
+                    'pageid' => $this->pageid,
+                    'userid' => $USER->id
+                ], 'timecreated ASC');
+                
+                foreach ($messages as $msg) {
+                    $roleobj = new \stdClass();
+                    $roleobj->{$msg->role} = true;
+                    
+                    $msgdata = [
+                        'id' => $msg->id,
+                        'role' => $roleobj,
+                        'content' => format_text($msg->content, FORMAT_MARKDOWN, [
+                            'context' => $this->context,
+                            'noclean' => false,
+                            'overflowdiv' => true
+                        ]),
+                        'parentid' => $msg->parentid,
+                        'turn_id' => $msg->turn_id,
+                        'timecreated' => $msg->timecreated
+                    ];
+                    
+                    
+                    $conversationhistory[] = $msgdata;
+                }
+            }
+            
+            // Prepare JSON for turn evaluation questions (for JavaScript).
+            $turnevaluationquestionsjson = '';
+            if (!empty($turnevaluationquestions)) {
+                $turnevaluationquestionsjson = json_encode($turnevaluationquestions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+
+            $aichatdata = [
+                'models' => $models,
+                'has_models' => !empty($models),
+                'behavior' => $pagebehavior,
+                'is_turns_mode' => $isturnsmode, // Explicit boolean.
+                'conversation_history' => $conversationhistory,
+                'has_history' => !empty($conversationhistory),
+                'turn_evaluation_questions' => $turnevaluationquestions,
+                'has_turn_evaluation_questions' => !empty($turnevaluationquestions),
+                'turn_evaluation_questions_json' => $turnevaluationquestionsjson
+            ];
+        } else {
+            // Ensure aichatdata is always an array, even if not an aichat page
+            $aichatdata = [
+                'models' => [],
+                'has_models' => false,
+                'behavior' => 'continuous',
+                'is_turns_mode' => false,
+                'conversation_history' => [],
+                'has_history' => false,
+                'turn_evaluation_questions' => [],
+                'has_turn_evaluation_questions' => false,
+                'turn_evaluation_questions_json' => ''
+            ];
+        }
+
+
         return [
             'title' => format_string($this->page->title),
             'description' => $description,
@@ -414,9 +546,15 @@ class page_view implements renderable, templatable {
             'questions' => $questionslist,
             'has_questions' => !empty($questionslist),
             'has_non_aiconversation_questions' => $hasnonaiconversationquestions,
+            'turn_evaluation_questions' => $turnevaluationquestions,
+            'has_turn_evaluation_questions' => !empty($turnevaluationquestions),
             'pagination' => $pagination,
             'has_pagination' => !empty($pagination),
             'wwwroot' => $CFG->wwwroot,
+            'cmid' => $this->cmid,
+            'pageid' => $this->pageid,
+            'is_aichat_page' => $hasaichat,
+            'aichat' => $aichatdata,
         ];
     }
 }

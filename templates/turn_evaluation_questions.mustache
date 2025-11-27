@@ -1,0 +1,80 @@
+{{!
+    Template for rendering turn evaluation questions.
+    Similar to regular questions but with turn-specific naming.
+}}
+{{#has_questions}}
+    <div class="turn-evaluation-questions-content">
+        <small class="text-muted d-block mb-2">
+            <strong>{{#str}}evaluateturn, mod_harpiasurvey{{/str}}</strong>
+        </small>
+        {{#questions}}
+            <div class="question-item mb-3" data-questionid="{{id}}" data-questiontype="{{type}}">
+                <h6 class="mb-2">{{name}}</h6>
+                <div class="question-description mb-2">
+                    {{{description}}}
+                </div>
+                
+                {{#has_options}}
+                    {{#is_select}}
+                        <select class="form-control form-control-sm" name="question_{{id}}_turn" id="question_{{id}}_turn_{{turn_id}}">
+                            <option value="">{{#str}}noselection, mod_harpiasurvey{{/str}}</option>
+                            {{#options}}
+                                <option value="{{id}}" {{#isdefault}}selected{{/isdefault}}>{{value}}</option>
+                            {{/options}}
+                        </select>
+                    {{/is_select}}
+                    {{^is_select}}
+                        {{#is_likert}}
+                            <div class="likert-scale d-flex justify-content-between align-items-center">
+                                {{#options}}
+                                    <div class="likert-option text-center">
+                                        <input class="form-check-input" type="radio" 
+                                               name="{{nameattr}}" id="option_{{id}}_turn_{{turn_id}}" value="{{id}}" {{#isdefault}}checked{{/isdefault}}>
+                                        <label class="form-check-label d-block mt-1" for="option_{{id}}_turn_{{turn_id}}">
+                                            {{value}}
+                                        </label>
+                                    </div>
+                                {{/options}}
+                            </div>
+                        {{/is_likert}}
+                        {{^is_likert}}
+                            <div class="question-options">
+                                {{#options}}
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="{{inputtype}}" 
+                                               name="{{nameattr}}" id="option_{{id}}_turn_{{turn_id}}" value="{{id}}" {{#isdefault}}checked{{/isdefault}}>
+                                        <label class="form-check-label" for="option_{{id}}_turn_{{turn_id}}">
+                                            {{value}}
+                                        </label>
+                                    </div>
+                                {{/options}}
+                            </div>
+                        {{/is_likert}}
+                    {{/is_select}}
+                {{/has_options}}
+                {{^has_options}}
+                    {{#is_number}}
+                        <input type="number" class="form-control form-control-sm" name="question_{{id}}_turn" id="question_{{id}}_turn_{{turn_id}}"
+                               {{#numbersettings.has_min}}min="{{numbersettings.min_value}}"{{/numbersettings.has_min}}
+                               {{#numbersettings.has_max}}max="{{numbersettings.max_value}}"{{/numbersettings.has_max}}
+                               {{#numbersettings.step}}step="{{numbersettings.step}}"{{/numbersettings.step}}
+                               {{#numbersettings.default}}value="{{numbersettings.default}}"{{/numbersettings.default}}>
+                    {{/is_number}}
+                    {{#is_shorttext}}
+                        <input type="text" class="form-control form-control-sm" name="question_{{id}}_turn" id="question_{{id}}_turn_{{turn_id}}">
+                    {{/is_shorttext}}
+                    {{#is_longtext}}
+                        <textarea class="form-control form-control-sm" name="question_{{id}}_turn" id="question_{{id}}_turn_{{turn_id}}" rows="3"></textarea>
+                    {{/is_longtext}}
+                {{/has_options}}
+            </div>
+        {{/questions}}
+        <button type="button" class="btn btn-sm btn-primary save-turn-evaluation-questions-btn" 
+                data-turn-id="{{turn_id}}" 
+                data-pageid="{{pageid}}" 
+                data-cmid="{{cmid}}">
+            {{#str}}save, mod_harpiasurvey{{/str}}
+        </button>
+    </div>
+{{/has_questions}}
+

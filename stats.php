@@ -69,14 +69,11 @@ if (empty($pageids)) {
 $responses = [];
 if (!empty($pageids)) {
     list($insql, $inparams) = $DB->get_in_or_equal($pageids, SQL_PARAMS_NAMED);
-    $sql = "SELECT r.id, r.userid, r.questionid, r.pageid, r.response, r.timecreated, r.timemodified,
-                   q.name AS questionname, q.type AS questiontype, q.settings AS questionsettings,
-                   pq.evaluates_conversation_id,
-                   cq.name AS evaluates_conversation_name
+    $sql = "SELECT r.id, r.userid, r.questionid, r.pageid, r.response, r.timecreated, r.timemodified, r.turn_id,
+                   q.name AS questionname, q.type AS questiontype, q.settings AS questionsettings
               FROM {harpiasurvey_responses} r
               JOIN {harpiasurvey_questions} q ON q.id = r.questionid
               JOIN {harpiasurvey_page_questions} pq ON pq.pageid = r.pageid AND pq.questionid = r.questionid
-         LEFT JOIN {harpiasurvey_questions} cq ON cq.id = pq.evaluates_conversation_id
              WHERE r.pageid $insql
           ORDER BY r.userid ASC, q.name ASC, r.timecreated ASC";
 
@@ -316,11 +313,12 @@ foreach ($responses as $response) {
     // Get localized question type string
     $questiontypestring = get_string('type' . $response->questiontype, 'mod_harpiasurvey');
     
-    // Get evaluates conversation name if available
-    $evaluatesconversation = '';
-    if (!empty($response->evaluates_conversation_id) && !empty($response->evaluates_conversation_name)) {
-        $evaluatesconversation = format_string($response->evaluates_conversation_name);
-    }
+    // Note: evaluates_conversation_id has been removed.
+    // For aichat pages, all questions evaluate the page's chat conversation.
+    // We can identify this by checking if the page type is 'aichat'.
+    $page = $DB->get_record('harpiasurvey_pages', ['id' => $response->pageid], 'type, behavior');
+    $is_aichat_page = ($page && $page->type === 'aichat');
+    $evaluatesconversation = $is_aichat_page ? get_string('pagechatevaluation', 'mod_harpiasurvey') : '';
     
     $responseslist[] = [
         'id' => $response->id,
@@ -328,6 +326,7 @@ foreach ($responses as $response) {
         'question' => format_string($response->questionname),
         'questiontype' => $questiontypestring,
         'evaluatesconversation' => $evaluatesconversation,
+        'turn_id' => $response->turn_id ?? null, // Include turn_id for turn-based evaluations.
         'answeritems' => $answeritems,
         'answeritemsjson' => htmlspecialchars($answeritemsjson, ENT_QUOTES, 'UTF-8'), // For JavaScript reconstruction.
         'answer' => htmlspecialchars($fulltext, ENT_QUOTES, 'UTF-8'), // Escape for data attribute.
@@ -346,6 +345,7 @@ foreach ($conversationslist as $conv) {
         'question' => $conv['question'],
         'questiontype' => $conv['questiontype'],
         'evaluatesconversation' => '', // Conversations don't evaluate other conversations
+        'turn_id' => null, // Conversations don't have turn_id
         'isconversation' => true,
         'messagecount' => $conv['messagecount'],
         'preview' => $conv['preview'],

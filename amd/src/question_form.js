@@ -88,8 +88,6 @@ export const init = () => {
         // Show/hide number settings (for number type).
         toggleSection('number_settings', selectedType === 'number');
 
-        // Show/hide AI settings (for aiconversation type).
-        toggleSection('ai_settings', selectedType === 'aiconversation');
     };
 
     // Listen for type changes.

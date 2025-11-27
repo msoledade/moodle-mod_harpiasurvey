@@ -88,6 +88,7 @@ $context = $cm->context;
 $formdata = new stdClass();
 $formdata->cmid = $cm->id;
 $formdata->experimentid = $experiment->id;
+$formdata->harpiasurveyid = $harpiasurvey->id;
 
 // If editing, load page data.
 if ($pageid) {
@@ -97,6 +98,7 @@ if ($pageid) {
     $formdata->description = $page->description;
     $formdata->descriptionformat = $page->descriptionformat;
     $formdata->type = $page->type;
+    $formdata->behavior = $page->behavior ?? 'continuous';
     $formdata->available = $page->available;
 } else {
     $formdata->id = 0;
@@ -155,6 +157,7 @@ if ($form->is_cancelled()) {
     $pagedata->experimentid = $experiment->id;
     $pagedata->title = $data->title;
     $pagedata->type = $data->type;
+    $pagedata->behavior = isset($data->behavior) ? $data->behavior : 'continuous';
     $pagedata->available = isset($data->available) ? (int)$data->available : 1;
     $pagedata->timemodified = time();
 
@@ -175,6 +178,7 @@ if ($form->is_cancelled()) {
         // Update existing page.
         $pagedata->id = $data->id;
         $DB->update_record('harpiasurvey_pages', $pagedata);
+        $pageid = $data->id;
         
         // Handle question enabled states.
         if (isset($data->question_enabled) && is_array($data->question_enabled)) {
@@ -198,7 +202,40 @@ if ($form->is_cancelled()) {
         );
         $pagedata->sortorder = ($maxsort !== false) ? $maxsort + 1 : 0;
         $pagedata->timecreated = time();
-        $DB->insert_record('harpiasurvey_pages', $pagedata);
+        $pageid = $DB->insert_record('harpiasurvey_pages', $pagedata);
+    }
+
+    // Handle page-model associations (only for aichat pages).
+    if ($pagedata->type === 'aichat' && $pagedata->behavior !== 'multi_model') {
+        // Delete existing associations.
+        $DB->delete_records('harpiasurvey_page_models', ['pageid' => $pageid]);
+        
+        // Create new associations if models were selected.
+        // Note: pagemodels can be an array or a single value from autocomplete
+        $selectedmodelids = [];
+        if (isset($data->pagemodels)) {
+            if (is_array($data->pagemodels)) {
+                $selectedmodelids = $data->pagemodels;
+            } else {
+                // Single value
+                $selectedmodelids = [$data->pagemodels];
+            }
+        }
+        
+        // Filter out empty values
+        $selectedmodelids = array_filter($selectedmodelids, function($id) {
+            return !empty($id) && $id > 0;
+        });
+        
+        if (!empty($selectedmodelids)) {
+            foreach ($selectedmodelids as $modelid) {
+                $association = new stdClass();
+                $association->pageid = $pageid;
+                $association->modelid = (int)$modelid;
+                $association->timecreated = time();
+                $DB->insert_record('harpiasurvey_page_models', $association);
+            }
+        }
     }
 
     // Purge course cache to refresh the table display.

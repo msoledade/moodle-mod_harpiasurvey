@@ -164,11 +164,13 @@ if ($pageid) {
         $formdata = new stdClass();
         $formdata->cmid = $cm->id;
         $formdata->experimentid = $experiment->id;
+        $formdata->harpiasurveyid = $harpiasurvey->id;
         $formdata->id = $viewingpage->id;
         $formdata->title = $viewingpage->title;
         $formdata->description = $viewingpage->description;
         $formdata->descriptionformat = $viewingpage->descriptionformat;
         $formdata->type = $viewingpage->type;
+        $formdata->behavior = $viewingpage->behavior ?? 'continuous';
         $formdata->available = $viewingpage->available;
         
         $formurl = new moodle_url('/mod/harpiasurvey/edit_page.php', ['id' => $cm->id, 'experiment' => $experiment->id, 'page' => $pageid]);
@@ -180,22 +182,13 @@ if ($pageid) {
         require_once(__DIR__.'/classes/output/page_view.php');
         
         // Get questions for this page (only enabled ones will be shown).
-        // Filter: aiconversation questions only shown on aichat pages
-        $page_type = $viewingpage->type ?? '';
+        // Get questions for this page (all question types are allowed on all page types now).
         $sql = "SELECT pq.*, q.id AS questionid, q.name, q.type, q.description, q.descriptionformat, q.settings,
-                       pq.evaluates_conversation_id,
-                       cq.name AS evaluates_conversation_name
+                       pq.min_turn
                   FROM {harpiasurvey_page_questions} pq
                   JOIN {harpiasurvey_questions} q ON q.id = pq.questionid
-             LEFT JOIN {harpiasurvey_questions} cq ON cq.id = pq.evaluates_conversation_id
-                 WHERE pq.pageid = :pageid AND pq.enabled = 1 AND q.enabled = 1";
-        
-        // Filter aiconversation questions from non-aichat pages
-        if ($page_type !== 'aichat') {
-            $sql .= " AND q.type != 'aiconversation'";
-        }
-        
-        $sql .= " ORDER BY pq.sortorder ASC";
+                 WHERE pq.pageid = :pageid AND pq.enabled = 1 AND q.enabled = 1
+              ORDER BY pq.sortorder ASC";
         
         $pagequestions = $DB->get_records_sql($sql, ['pageid' => $pageid]);
         

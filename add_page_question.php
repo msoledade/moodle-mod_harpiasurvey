@@ -42,37 +42,6 @@ if ($questionid) {
         'harpiasurveyid' => $harpiasurvey->id
     ], '*', MUST_EXIST);
     
-    // Validate: aiconversation questions can only be added to aichat pages
-    if ($question->type === 'aiconversation' && $page->type !== 'aichat') {
-        redirect(new moodle_url('/mod/harpiasurvey/view_experiment.php', [
-            'id' => $cm->id,
-            'experiment' => $experiment->id,
-            'page' => $pageid,
-            'edit' => 1
-        ]), 'AI conversation questions can only be added to AI Chat pages.', null, \core\output\notification::NOTIFY_ERROR);
-    }
-    
-    // Get evaluates_conversation_id if provided (for aichat pages).
-    $evaluates_conversation_id = optional_param('evaluates_conversation_id', 0, PARAM_INT);
-    if ($evaluates_conversation_id > 0 && $page->type === 'aichat') {
-        // Validate that the conversation question exists on this page.
-        $conversationquestion = $DB->get_record_sql(
-            "SELECT pq.questionid, q.type
-               FROM {harpiasurvey_page_questions} pq
-               JOIN {harpiasurvey_questions} q ON q.id = pq.questionid
-              WHERE pq.pageid = :pageid AND pq.questionid = :convquestionid AND q.type = 'aiconversation'",
-            ['pageid' => $pageid, 'convquestionid' => $evaluates_conversation_id]
-        );
-        if (!$conversationquestion) {
-            redirect(new moodle_url('/mod/harpiasurvey/view_experiment.php', [
-                'id' => $cm->id,
-                'experiment' => $experiment->id,
-                'page' => $pageid,
-                'edit' => 1
-            ]), 'Invalid conversation question selected.', null, \core\output\notification::NOTIFY_ERROR);
-        }
-    }
-    
     // Check if question is already on this page.
     $existing = $DB->get_record('harpiasurvey_page_questions', [
         'pageid' => $pageid,
@@ -93,9 +62,13 @@ if ($questionid) {
         $pagequestion->sortorder = ($maxsort !== false) ? $maxsort + 1 : 0;
         $pagequestion->timecreated = time();
         $pagequestion->enabled = 1; // Default to enabled.
-        if ($evaluates_conversation_id > 0) {
-            $pagequestion->evaluates_conversation_id = $evaluates_conversation_id;
+        
+        // For aichat pages with turns mode, set min_turn = 1 by default.
+        // All questions on aichat pages evaluate the page's chat conversation.
+        if ($page->type === 'aichat' && ($page->behavior ?? 'continuous') === 'turns') {
+            $pagequestion->min_turn = 1; // Default to appearing from turn 1.
         }
+        
         $DB->insert_record('harpiasurvey_page_questions', $pagequestion);
     }
     
@@ -115,16 +88,10 @@ $questions = $DB->get_records('harpiasurvey_questions', ['harpiasurveyid' => $ha
 $pagequestionids = $DB->get_records('harpiasurvey_page_questions', ['pageid' => $pageid], '', 'questionid');
 $pagequestionids = array_keys($pagequestionids);
 
-// Filter out questions already on the page and filter by page type.
+// Filter out questions already on the page.
 $availablequestions = [];
-$page_type = $page->type ?? '';
 foreach ($questions as $question) {
     if (!in_array($question->id, $pagequestionids)) {
-        // Filter: aiconversation questions only allowed on aichat pages
-        // Non-aiconversation questions are allowed on all pages
-        if ($question->type === 'aiconversation' && $page_type !== 'aichat') {
-            continue; // Skip aiconversation questions on non-aichat pages
-        }
         $availablequestions[] = $question;
     }
 }

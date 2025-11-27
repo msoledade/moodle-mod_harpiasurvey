@@ -60,10 +60,6 @@ export const init = (cmid, pageid) => {
         const questionsToSave = [];
         $('.question-item').each(function() {
             const questionItem = $(this);
-            // Skip AI conversation questions.
-            if (questionItem.data('questiontype') === 'aiconversation') {
-                return;
-            }
 
             const questionid = parseInt(questionItem.data('questionid'), 10);
             const questiontype = questionItem.data('questiontype');
@@ -134,6 +130,43 @@ const saveAllResponses = (cmid, pageid, questionsToSave, button, statusDiv) => {
     button.prop('disabled', true);
     statusDiv.show().html('<div class="text-info"><i class="fa fa-spinner fa-spin"></i> Saving responses...</div>');
 
+    // Check if this is a turns mode page and get current turn.
+    // The button might be outside the ai-conversation-container, so search from document.
+    const container = $('.ai-conversation-container[data-pageid="' + pageid + '"]');
+    let turnId = null;
+    if (container.length > 0) {
+        const behavior = container.data('behavior');
+        if (behavior === 'turns') {
+            // Get current viewing turn from the container.
+            const viewingTurn = container.attr('data-viewing-turn');
+            if (viewingTurn) {
+                turnId = parseInt(viewingTurn, 10);
+            } else {
+                // If no viewing turn is set, get the current turn (highest turn with messages).
+                const messagesContainer = container.find(`#chat-messages-page-${pageid}`);
+                if (messagesContainer.length > 0) {
+                    const messages = messagesContainer.find('.message[data-turn-id]');
+                    let maxTurn = 0;
+                    messages.each(function() {
+                        const msgTurnId = parseInt($(this).attr('data-turn-id'), 10);
+                        if (msgTurnId > maxTurn) {
+                            maxTurn = msgTurnId;
+                        }
+                    });
+                    if (maxTurn > 0) {
+                        turnId = maxTurn;
+                    } else {
+                        // If no messages yet, default to turn 1 (first turn).
+                        turnId = 1;
+                    }
+                } else {
+                    // If no messages container found, default to turn 1 (first turn).
+                    turnId = 1;
+                }
+            }
+        }
+    }
+
     let savedCount = 0;
     let failedCount = 0;
     const total = questionsToSave.length;
@@ -155,6 +188,11 @@ const saveAllResponses = (cmid, pageid, questionsToSave, button, statusDiv) => {
                     response: questionData.response,
                     sesskey: Config.sesskey
                 });
+
+                // Add turn_id if this is a turns mode page.
+                if (turnId !== null && turnId > 0) {
+                    params.append('turn_id', turnId);
+                }
 
                 fetch(Config.wwwroot + '/mod/harpiasurvey/ajax.php?' + params.toString(), {
                     method: 'GET',
